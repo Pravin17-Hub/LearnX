@@ -5,12 +5,20 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 public class DBConnection {
-    private static final String URL = "jdbc:mysql://localhost:3306/learnx_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
-    private static final String USER = "root";
-    private static final String PASSWORD = "";
+    private static final String URL;
+    private static final String USER;
+    private static final String PASSWORD;
     private static final String DRIVER_CLASS = "com.mysql.cj.jdbc.Driver";
 
     static {
+        String envUrl = System.getenv("DB_URL");
+        String envUser = System.getenv("DB_USER");
+        String envPass = System.getenv("DB_PASSWORD");
+
+        URL = (envUrl != null) ? envUrl : "jdbc:mysql://localhost:3306/learnx_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
+        USER = (envUser != null) ? envUser : "root";
+        PASSWORD = (envPass != null) ? envPass : "";
+
         try {
             Class.forName(DRIVER_CLASS);
         } catch (ClassNotFoundException e) {
