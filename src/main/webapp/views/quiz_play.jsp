@@ -366,9 +366,18 @@
         });
     }, 200);
 
-    // Prevent key shortcuts (F12, DevTools, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+U)
+    // Prevent key shortcuts (F12, DevTools, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+U, Alt/Meta modifiers)
     document.addEventListener('keydown', e => {
         if (!examStarted) return;
+
+        // Block Alt and Meta (Cmd/Windows) key combinations to prevent extension triggers
+        if (e.altKey || e.metaKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            triggerSecurityViolation("forbidden modifier key (Alt/Meta) shortcut invocation");
+            return;
+        }
+
         if (e.key === 'F12' || 
             (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
             (e.ctrlKey && e.key === 'u') ||
@@ -381,6 +390,34 @@
             triggerSecurityViolation("forbidden keyboard shortcut");
         }
     }, true);
+
+    // Monitor DOM changes to detect injected extension overlays (AI widgets, sidebars, autocomplete highlights)
+    const observer = new MutationObserver(mutations => {
+        if (!examStarted) return;
+        for (let mutation of mutations) {
+            if (mutation.addedNodes.length > 0) {
+                for (let node of mutation.addedNodes) {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        // Ignore standard application modals and system tooltips/styles
+                        if (node.id === 'warningModal' || 
+                            node.id === 'startExamModal' || 
+                            node.className.includes('tooltip') ||
+                            node.className.includes('modal') ||
+                            node.tagName.toLowerCase() === 'style' ||
+                            node.tagName.toLowerCase() === 'script') {
+                            continue;
+                        }
+                        triggerSecurityViolation("unauthorized extension overlay injection");
+                    }
+                }
+            }
+        }
+    });
+
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+    });
 </script>
 
 <%@ include file="/common/footer.jsp" %>
