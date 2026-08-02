@@ -33,7 +33,7 @@ public class AuthFilter implements Filter {
         
         // Allowed paths without login
         boolean isStaticAsset = path.startsWith("/assets/") || path.startsWith("/uploads/");
-        boolean isAuthEndpoint = path.equals("/auth") || path.equals("/profile") || path.equals("/views/login.jsp") || path.equals("/index.jsp") || path.equals("/");
+        boolean isAuthEndpoint = path.equals("/auth") || path.equals("/profile") || path.equals("/views/login.jsp") || path.equals("/index.jsp") || path.equals("/") || path.equals("/diagnostics.jsp");
         
         // Intercept vanity profile URL (/@username) and forward
         if (path.startsWith("/@")) {
