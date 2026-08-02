@@ -200,10 +200,14 @@
     document.addEventListener('MSFullscreenChange', handleFullscreenChange);
 
     // Anti-cheating Security System
+    let isWindowFocused = true;
     let tabSwitchCount = 0;
 
     function handleTabSwitch() {
         if (!examStarted) return;
+        if (!isWindowFocused) return; // Prevent double-triggering in the same blur cycle
+        
+        isWindowFocused = false;
         tabSwitchCount++;
         if (tabSwitchCount === 1) {
             // Show warning modal
@@ -211,9 +215,7 @@
             modal.classList.remove('d-none');
             modal.style.display = 'flex';
         } else if (tabSwitchCount >= 2) {
-            // Auto submit
-            alert("Security violation! Your test is being automatically submitted.");
-            form.submit();
+            triggerSecurityViolation("tab switching / focus loss");
         }
     }
 
@@ -221,12 +223,15 @@
         const modal = document.getElementById('warningModal');
         modal.classList.add('d-none');
         modal.style.display = 'none';
+        isWindowFocused = true; // reset focus flag
     }
 
     // Monitor Visibility State
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
             handleTabSwitch();
+        } else if (document.visibilityState === 'visible') {
+            isWindowFocused = true;
         }
     });
 
@@ -239,9 +244,22 @@
         }, 250);
     });
 
+    window.addEventListener('focus', () => {
+        isWindowFocused = true;
+    });
+
     // Helper to log and auto-submit on clipboard/drag-drop cheating attempt
     function triggerSecurityViolation(reason) {
-        alert("Security violation detected: " + reason + "\nYour test is being automatically submitted.");
+        // Append a hidden parameter so the server knows it was auto-submitted due to a violation
+        const violationInput = document.createElement('input');
+        violationInput.type = 'hidden';
+        violationInput.name = 'securityViolation';
+        violationInput.value = reason;
+        form.appendChild(violationInput);
+
+        // Turn off exam started state to prevent any subsequent event triggers during postback
+        examStarted = false;
+
         form.submit();
     }
 

@@ -340,7 +340,8 @@ public class QuizServlet extends HttpServlet {
         if (startTime != null) {
             timeElapsedSec = (System.currentTimeMillis() - startTime) / 1000;
         }
-        boolean autoSaved = timeElapsedSec > (activeQuiz.getDurationMinutes() * 60 + 30);
+        String securityViolation = request.getParameter("securityViolation");
+        boolean autoSaved = timeElapsedSec > (activeQuiz.getDurationMinutes() * 60 + 30) || (securityViolation != null && !securityViolation.isEmpty());
 
         int finalScore = 0;
         JsonObject answersMap = new JsonObject();
