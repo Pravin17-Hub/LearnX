@@ -143,6 +143,91 @@
         </div>
         <% } %>
     </div>
+
+    <% 
+        boolean isTeacher = currentUser != null && 
+            ("Faculty".equals(currentUser.getRole()) || "Administrator".equals(currentUser.getRole()) || currentUser.getId() == quiz.getCreatorId());
+        if (isTeacher) {
+            List<Map<String, Object>> allAttempts = (List<Map<String, Object>>) request.getAttribute("allAttempts");
+    %>
+        <!-- Teacher Submissions View -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="glass-card p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3 border-divider">
+                        <div>
+                            <h5 class="fw-bold mb-1 text-main"><i class="fa-solid fa-list-check text-primary me-2"></i>Detailed Student Submissions</h5>
+                            <small class="text-muted">Total Attended: <strong class="text-white"><%= (allAttempts != null) ? allAttempts.size() : 0 %></strong> students</small>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover align-middle border-divider font-size-sm mb-0">
+                            <thead>
+                                <tr class="text-muted border-bottom border-divider" style="font-size: 0.8rem; text-transform: uppercase;">
+                                    <th class="ps-3">Student Name</th>
+                                    <th>Reg No</th>
+                                    <th>Submission Time</th>
+                                    <th>Score</th>
+                                    <th>Status</th>
+                                    <th class="text-end pe-3">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% 
+                                    if (allAttempts != null && !allAttempts.isEmpty()) {
+                                        for (Map<String, Object> att : allAttempts) {
+                                            int score = (int) att.get("score");
+                                            int maxScore = (int) att.get("max_score");
+                                            if (maxScore <= 0) maxScore = quiz.getMaxMarks();
+                                %>
+                                    <tr class="border-bottom border-divider last-border-0">
+                                        <td class="ps-3">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <i class="fa-solid fa-user-graduate text-muted"></i>
+                                                <span class="fw-bold text-main"><%= att.get("name") %></span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="text-muted"><%= (att.get("reg_no") != null) ? att.get("reg_no") : "N/A (Guest)" %></span>
+                                        </td>
+                                        <td>
+                                            <span class="text-muted"><%= att.get("submit_time") %></span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-primary-glass text-primary px-2.5 py-1 fw-bold"><%= score %> / <%= maxScore %></span>
+                                        </td>
+                                        <td>
+                                            <% if (att.get("autoSaved") != null && (boolean) att.get("autoSaved")) { %>
+                                                <span class="badge bg-warning-glass text-warning font-size-xs px-2 py-0.5">Auto-Submitted</span>
+                                            <% } else { %>
+                                                <span class="badge bg-success-glass text-success font-size-xs px-2 py-0.5">Submitted</span>
+                                            <% } %>
+                                        </td>
+                                        <td class="text-end pe-3">
+                                            <a href="<%= request.getContextPath() %>/quiz?action=attempt_result&attemptId=<%= att.get("id") %>" class="btn btn-xs btn-outline-primary rounded-pill px-3 py-1.5 font-size-xs fw-semibold">
+                                                <i class="fa-solid fa-eye me-1"></i>View Student Answers
+                                            </a>
+                                        </td>
+                                    </tr>
+                                <% 
+                                        }
+                                    } else {
+                                %>
+                                    <tr>
+                                        <td colspan="6" class="text-center py-4 text-muted">
+                                            <i class="fa-solid fa-clipboard-question fs-3 mb-2 d-block"></i>
+                                            No student has attended this test yet.
+                                        </td>
+                                    </tr>
+                                <% } %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <% } %>
 </div>
 
 <script>

@@ -108,6 +108,12 @@ public class QuizServlet extends HttpServlet {
                     }
                     List<Map<String, Object>> leaderboard = quizDAO.getQuizLeaderboard(quizId);
 
+                    boolean isTeacher = user != null && ("Faculty".equals(user.getRole()) || "Administrator".equals(user.getRole()) || user.getId() == quiz.getCreatorId());
+                    if (isTeacher) {
+                        List<Map<String, Object>> allAttempts = quizDAO.getAllQuizAttempts(quizId);
+                        request.setAttribute("allAttempts", allAttempts);
+                    }
+
                     request.setAttribute("quiz", quiz);
                     request.setAttribute("attempted", attempted);
                     request.setAttribute("leaderboard", leaderboard);

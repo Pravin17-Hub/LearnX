@@ -360,6 +360,40 @@ public class QuizDAO {
         return list;
     }
 
+    public List<Map<String, Object>> getAllQuizAttempts(int quizId) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        String query = "SELECT qa.*, u.username, u.name, u.reg_no FROM quiz_attempts qa " +
+                       "LEFT JOIN users u ON qa.student_id = u.id " +
+                       "WHERE qa.quiz_id = ? ORDER BY qa.submit_time DESC";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(query)) {
+            ps.setInt(1, quizId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> map = new HashMap<>();
+                    String studentName = rs.getString("name");
+                    String username = rs.getString("username");
+                    String guestName = rs.getString("guest_name");
+                    String name = (studentName != null && !studentName.isEmpty()) ? studentName : ((username != null && !username.isEmpty()) ? "@" + username : guestName);
+                    if (name == null || name.isEmpty()) {
+                        name = "Guest Scholar";
+                    }
+                    map.put("id", rs.getInt("id"));
+                    map.put("name", name);
+                    map.put("reg_no", rs.getString("reg_no"));
+                    map.put("score", rs.getInt("score"));
+                    map.put("max_score", rs.getInt("max_score"));
+                    map.put("submit_time", rs.getTimestamp("submit_time"));
+                    map.put("autoSaved", rs.getBoolean("auto_saved"));
+                    list.add(map);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
     public boolean updateQuiz(Quiz quiz) {
         String query = "UPDATE quizzes SET title = ?, description = ?, duration_minutes = ?, shuffle_questions = ?, negative_marking = ?, max_marks = ? WHERE id = ?";
         try (Connection conn = DBConnection.getConnection();
