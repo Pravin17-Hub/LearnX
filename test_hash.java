@@ -1,0 +1,1 @@
+public class test_hash { public static void main(String[] args) { System.out.println(com.learnx.util.PasswordHasher.hashPassword(" admin123\)); } }
