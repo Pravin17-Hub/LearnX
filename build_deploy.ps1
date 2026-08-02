@@ -69,7 +69,7 @@ if ($JavaFiles.Count -eq 0) {
     Write-Host "   No Java source files found yet. Skipping compilation." -ForegroundColor Gray
 } else {
     $TomcatLib = "$TomcatPath\lib"
-    $Classpath = ".;$TomcatLib\servlet-api.jar;$TomcatLib\jsp-api.jar;$LibDir\mysql-connector-j-8.3.0.jar;$LibDir\gson-2.11.0.jar"
+    $Classpath = ".;$TomcatLib\servlet-api.jar;$TomcatLib\jsp-api.jar;$TomcatLib\tomcat-dbcp.jar;$LibDir\mysql-connector-j-8.3.0.jar;$LibDir\gson-2.11.0.jar"
     
     # Compile with Java 17 release compatibility target
     $JavaFilesArg = $JavaFiles -join " "
