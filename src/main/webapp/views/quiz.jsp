@@ -198,16 +198,27 @@
                                             <span class="badge bg-primary-glass text-primary px-2.5 py-1 fw-bold"><%= score %> / <%= maxScore %></span>
                                         </td>
                                         <td>
-                                            <% if (att.get("autoSaved") != null && (boolean) att.get("autoSaved")) { %>
+                                            <% 
+                                                String violation = (String) att.get("violationReason");
+                                                if (violation != null && !violation.trim().isEmpty()) { 
+                                            %>
+                                                <span class="badge bg-danger-glass text-danger font-size-xs px-2 py-0.5" title="<%= violation %>"><i class="fa-solid fa-triangle-exclamation me-1"></i>Violated</span>
+                                                <div class="font-size-xxs text-danger mt-1 text-truncate" style="max-width: 150px;"><%= violation %></div>
+                                            <% } else if (att.get("autoSaved") != null && (boolean) att.get("autoSaved")) { %>
                                                 <span class="badge bg-warning-glass text-warning font-size-xs px-2 py-0.5">Auto-Submitted</span>
                                             <% } else { %>
                                                 <span class="badge bg-success-glass text-success font-size-xs px-2 py-0.5">Submitted</span>
                                             <% } %>
                                         </td>
                                         <td class="text-end pe-3">
-                                            <a href="<%= request.getContextPath() %>/quiz?action=attempt_result&attemptId=<%= att.get("id") %>" class="btn btn-xs btn-outline-primary rounded-pill px-3 py-1.5 font-size-xs fw-semibold">
-                                                <i class="fa-solid fa-eye me-1"></i>View Student Answers
-                                            </a>
+                                            <div class="d-flex justify-content-end gap-2">
+                                                <a href="<%= request.getContextPath() %>/quiz?action=attempt_result&attemptId=<%= att.get("id") %>" class="btn btn-xs btn-outline-primary rounded-pill px-3 py-1.5 font-size-xs fw-semibold">
+                                                    <i class="fa-solid fa-eye me-1"></i>View Answers
+                                                </a>
+                                                <a href="<%= request.getContextPath() %>/quiz?action=delete_attempt&attemptId=<%= att.get("id") %>&quizId=<%= quiz.getId() %>" class="btn btn-xs btn-outline-danger rounded-pill px-3 py-1.5 font-size-xs fw-semibold" onclick="return confirm('Are you sure you want to delete this test record? The student will be allowed to reattempt the test.');">
+                                                    <i class="fa-solid fa-trash me-1"></i>Delete Attempt
+                                                </a>
+                                            </div>
                                         </td>
                                     </tr>
                                 <% 

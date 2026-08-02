@@ -38,18 +38,42 @@
 
 <!-- Scorecard Result View -->
 <div class="<%= (currentUser != null) ? "col-md-9 col-sm-12" : "col-12" %> fade-in-up">
+    <%
+        String violationReason = (String) attempt.get("violationReason");
+        boolean isViolated = (violationReason != null && !violationReason.trim().isEmpty());
+    %>
     <!-- Scorecard Header Banner -->
-    <div class="glass-container p-4 mb-4 text-center overflow-hidden" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%); border-color: rgba(16, 185, 129, 0.2);">
-        <span class="badge bg-success-glass text-success px-3 py-1.5 mb-2 font-size-xs text-uppercase fw-bold"><i class="fa-solid fa-circle-check me-2"></i>Test Completed</span>
+    <div class="glass-container p-4 mb-4 text-center overflow-hidden" 
+         style="<%= isViolated ? "background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%); border-color: rgba(239, 68, 68, 0.2);" : "background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%); border-color: rgba(16, 185, 129, 0.2);" %>">
+        
+        <% if (isViolated) { %>
+            <span class="badge bg-danger-glass text-danger px-3 py-1.5 mb-2 font-size-xs text-uppercase fw-bold"><i class="fa-solid fa-triangle-exclamation me-2"></i>Security Violation Detected</span>
+        <% } else { %>
+            <span class="badge bg-success-glass text-success px-3 py-1.5 mb-2 font-size-xs text-uppercase fw-bold"><i class="fa-solid fa-circle-check me-2"></i>Test Completed</span>
+        <% } %>
+        
         <h3 class="fw-bold mb-1 text-main"><%= quizTitle %></h3>
         <p class="text-muted mb-3">Attempt score for <span class="text-white fw-bold"><%= submitName %></span></p>
 
         <!-- Dynamic Circular/Radial Score representation -->
         <div class="d-inline-block p-4 rounded-circle neumorphic-inset mb-3 border border-glass" style="min-width: 140px;">
             <small class="text-muted d-block font-size-xs text-uppercase fw-bold">Score</small>
-            <span class="fs-1 fw-bold text-success"><%= score %></span>
+            <span class="fs-1 fw-bold <%= isViolated ? "text-danger" : "text-success" %>"><%= score %></span>
             <span class="text-muted font-size-sm">/ <%= quizMaxMarks %></span>
         </div>
+
+        <% if (isViolated) { %>
+            <div class="alert alert-danger bg-danger-glass border-0 text-start mt-1 mb-3 mx-auto" style="max-width: 500px;">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="fa-solid fa-ban fs-5 text-danger"></i>
+                    <strong class="text-white">Exam Integrity Violation</strong>
+                </div>
+                <p class="font-size-sm mb-0 text-muted" style="line-height: 1.4;">
+                    This test attempt was immediately auto-submitted because the system detected the following violation:
+                    <strong class="text-white d-block mt-1 font-size-xs text-uppercase"><%= violationReason %></strong>
+                </p>
+            </div>
+        <% } %>
 
         <div class="d-flex justify-content-center gap-3">
             <button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="copyResultShareLink()">

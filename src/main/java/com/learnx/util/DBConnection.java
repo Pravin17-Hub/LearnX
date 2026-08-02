@@ -2,6 +2,7 @@ package com.learnx.util;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import org.apache.tomcat.dbcp.dbcp2.BasicDataSource;
 
 public class DBConnection {
@@ -31,6 +32,19 @@ public class DBConnection {
         // Connection health checks
         dataSource.setTestOnBorrow(true);
         dataSource.setValidationQuery("SELECT 1");
+
+        // Run dynamic database migration to ensure violation_reason column exists
+        try (Connection conn = dataSource.getConnection();
+             Statement stmt = conn.createStatement()) {
+            try {
+                stmt.execute("ALTER TABLE quiz_attempts ADD COLUMN violation_reason VARCHAR(255) NULL");
+                System.out.println("LearnX DB Migration: Added violation_reason column to quiz_attempts.");
+            } catch (SQLException e) {
+                // Column probably already exists or table does not exist yet (during schema init)
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     public static Connection getConnection() throws SQLException {

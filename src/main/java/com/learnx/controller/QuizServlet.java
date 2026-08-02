@@ -85,6 +85,29 @@ public class QuizServlet extends HttpServlet {
             return;
         }
 
+        if ("delete_attempt".equalsIgnoreCase(action)) {
+            if (user == null || (!"Faculty".equals(user.getRole()) && !"Administrator".equals(user.getRole()))) {
+                response.sendRedirect(request.getContextPath() + "/dashboard?error=unauthorized");
+                return;
+            }
+            String attemptIdStr = request.getParameter("attemptId");
+            String quizIdStr = request.getParameter("quizId");
+            if (attemptIdStr != null) {
+                try {
+                    int attemptId = Integer.parseInt(attemptIdStr);
+                    quizDAO.deleteQuizAttempt(attemptId);
+                } catch (NumberFormatException e) {
+                    e.printStackTrace();
+                }
+            }
+            if (quizIdStr != null) {
+                response.sendRedirect(request.getContextPath() + "/quiz?action=view&id=" + quizIdStr + "&msg=attempt_deleted");
+            } else {
+                response.sendRedirect(request.getContextPath() + "/dashboard");
+            }
+            return;
+        }
+
         // Standard actions: view or play
         if (idStr != null) {
             try {
@@ -439,7 +462,8 @@ public class QuizServlet extends HttpServlet {
             activeQuiz.getMaxMarks(),
             gson.toJson(answersMap),
             gson.toJson(feedbackMap),
-            autoSaved
+            autoSaved,
+            securityViolation
         );
 
         if (user != null) {

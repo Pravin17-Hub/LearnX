@@ -227,8 +227,8 @@ public class QuizDAO {
         return list;
     }
 
-    public int submitExtendedQuizAttempt(int quizId, Integer studentId, String guestName, int score, int maxScore, String answersJson, String aiFeedback, boolean autoSaved) {
-        String query = "INSERT INTO quiz_attempts (quiz_id, student_id, guest_name, score, max_score, answers_json, ai_feedback, auto_saved, submit_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+    public int submitExtendedQuizAttempt(int quizId, Integer studentId, String guestName, int score, int maxScore, String answersJson, String aiFeedback, boolean autoSaved, String violationReason) {
+        String query = "INSERT INTO quiz_attempts (quiz_id, student_id, guest_name, score, max_score, answers_json, ai_feedback, auto_saved, violation_reason, submit_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
             
@@ -248,6 +248,11 @@ public class QuizDAO {
             ps.setString(6, answersJson);
             ps.setString(7, aiFeedback);
             ps.setBoolean(8, autoSaved);
+            if (violationReason != null && !violationReason.trim().isEmpty()) {
+                ps.setString(9, violationReason);
+            } else {
+                ps.setNull(9, java.sql.Types.VARCHAR);
+            }
             
             int affected = ps.executeUpdate();
             if (affected > 0) {
@@ -287,6 +292,8 @@ public class QuizDAO {
                     map.put("answersJson", rs.getString("answers_json"));
                     map.put("aiFeedback", rs.getString("ai_feedback"));
                     map.put("submitTime", rs.getTimestamp("submit_time"));
+                    map.put("autoSaved", rs.getBoolean("auto_saved"));
+                    map.put("violationReason", rs.getString("violation_reason"));
                     return map;
                 }
             }
@@ -385,6 +392,7 @@ public class QuizDAO {
                     map.put("max_score", rs.getInt("max_score"));
                     map.put("submit_time", rs.getTimestamp("submit_time"));
                     map.put("autoSaved", rs.getBoolean("auto_saved"));
+                    map.put("violationReason", rs.getString("violation_reason"));
                     list.add(map);
                 }
             }
@@ -392,6 +400,18 @@ public class QuizDAO {
             e.printStackTrace();
         }
         return list;
+    }
+
+    public boolean deleteQuizAttempt(int attemptId) {
+        String query = "DELETE FROM quiz_attempts WHERE id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(query)) {
+            ps.setInt(1, attemptId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     public boolean updateQuiz(Quiz quiz) {
