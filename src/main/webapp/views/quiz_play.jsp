@@ -33,7 +33,28 @@
     String guestName = request.getParameter("guestName");
 %>
 
+<style>
+    body {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+    }
+</style>
+
 <div class="col-12 fade-in-up">
+    <!-- Start Exam Modal (Fullscreen Enforcer) -->
+    <div id="startExamModal" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(10,10,10,0.95); backdrop-filter: blur(15px); z-index: 10000; display: flex; align-items: center; justify-content: center; color: white;">
+        <div class="glass-card text-center p-5 border border-primary shadow-lg" style="max-width: 550px; background: rgba(20, 20, 20, 0.85); border-radius: 20px;">
+            <i class="fa-solid fa-shield-halved text-primary fs-1 mb-4"></i>
+            <h3 class="fw-bold mb-3 text-primary">Secure Exam Environment</h3>
+            <p class="mb-4 text-light">This exam must be taken in <strong>Fullscreen Mode</strong>. Switching tabs, exiting fullscreen, or minimizing the window will result in automatic submission.</p>
+            <button type="button" class="btn btn-primary px-5 py-3 rounded-pill fw-bold fs-5 shadow" onclick="startSecureExam()">
+                <i class="fa-solid fa-expand me-2"></i>Start Exam in Fullscreen
+            </button>
+        </div>
+    </div>
+
     <!-- Warning Modal Overlay -->
     <div id="warningModal" class="d-none" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); z-index: 9999; display: none; align-items: center; justify-content: center; color: white;">
         <div class="glass-card text-center p-5 border border-danger shadow-lg animate-pulse" style="max-width: 500px; background: rgba(20, 20, 20, 0.7); border-radius: 20px;">
@@ -96,18 +117,9 @@
                             </div>
 
                         <% } else { %>
-                            <!-- Theory / Analytical Textarea with OCR Option -->
+                            <!-- Theory / Analytical Textarea -->
                             <div class="mb-2">
                                 <textarea name="answer_<%= q.getId() %>" class="form-control form-control-glass" rows="6" placeholder="Type your detailed answer or explanation here..."></textarea>
-                                
-                                <!-- File input & Trigger for Handwriting OCR Scanning -->
-                                <input type="file" id="ocr_file_<%= q.getId() %>" style="display:none;" accept="image/*" onchange="runOCR(<%= q.getId() %>)">
-                                <div class="d-flex align-items-center justify-content-between mt-2.5">
-                                    <button type="button" class="btn btn-xs btn-outline-primary rounded-pill px-3 font-size-xs" onclick="document.getElementById('ocr_file_<%= q.getId() %>').click()">
-                                        <i class="fa-solid fa-camera me-1"></i>Scan Handwritten Notes (OCR)
-                                    </button>
-                                    <span class="text-muted font-size-xs italic" id="ocr_status_<%= q.getId() %>" style="display:none; font-style: italic;">Processing OCR transcription...</span>
-                                </div>
                             </div>
                         <% } %>
                     </div>
@@ -126,8 +138,11 @@
     let timeRemaining = <%= timeRemainingSec %>;
     const timerSpan = document.getElementById('timer');
     const form = document.getElementById('quizForm');
+    let examStarted = false;
+    let timerInterval = null;
 
     function updateTimer() {
+        if (!examStarted) return;
         const minutes = Math.floor(timeRemaining / 60);
         const seconds = timeRemaining % 60;
         
@@ -145,69 +160,50 @@
         timeRemaining--;
     }
 
-    updateTimer();
-    const timerInterval = setInterval(updateTimer, 1000);
+    // Entering secure fullscreen mode
+    function startSecureExam() {
+        const docEl = document.documentElement;
+        const requestFS = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullscreen || docEl.msRequestFullscreen;
+        
+        const enterExamMode = () => {
+            document.getElementById('startExamModal').style.display = 'none';
+            examStarted = true;
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 1000);
+        };
 
-    // OCR Handwriting Scan Execution
-    function runOCR(qId) {
-        const fileInput = document.getElementById(`ocr_file_${qId}`);
-        const textarea = document.querySelector(`textarea[name="answer_${qId}"]`);
-        const statusSpan = document.getElementById(`ocr_status_${qId}`);
-        
-        if (!fileInput.files || fileInput.files.length === 0) return;
-        
-        const file = fileInput.files[0];
-        const formData = new FormData();
-        formData.append("file", file);
-        
-        textarea.disabled = true;
-        statusSpan.style.display = "inline";
-        
-        fetch('<%= request.getContextPath() %>/ocr', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.text())
-        .then(text => {
-            textarea.disabled = false;
-            statusSpan.style.display = "none";
-            if (text.startsWith("Error")) {
-                alert(text);
-            } else {
-                textarea.value = text;
-            }
-        })
-        .catch(err => {
-            textarea.disabled = false;
-            statusSpan.style.display = "none";
-            console.error(err);
-            alert("Error connecting to OCR server.");
-        });
+        if (requestFS) {
+            requestFS.call(docEl)
+                .then(enterExamMode)
+                .catch(err => {
+                    alert("Error entering fullscreen mode: " + err.message + "\nPlease grant fullscreen permission to begin the exam.");
+                });
+        } else {
+            enterExamMode();
+        }
     }
 
+    // Monitor Fullscreen Mode Exit
+    const handleFullscreenChange = () => {
+        if (!document.fullscreenElement && 
+            !document.webkitIsFullScreen && 
+            !document.mozFullScreen && 
+            !document.msFullscreenElement &&
+            examStarted) {
+            triggerSecurityViolation("exiting fullscreen mode");
+        }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
     // Anti-cheating Security System
-    let isFilePickerOpen = false;
     let tabSwitchCount = 0;
 
-    // Track file picker interactions to prevent false positives
-    document.querySelectorAll('input[type="file"]').forEach(input => {
-        input.addEventListener('click', () => {
-            isFilePickerOpen = true;
-        });
-        input.addEventListener('change', () => {
-            setTimeout(() => {
-                isFilePickerOpen = false;
-            }, 1000);
-        });
-    });
-
-    window.addEventListener('focus', () => {
-        isFilePickerOpen = false;
-    });
-
     function handleTabSwitch() {
-        if (isFilePickerOpen) return;
-        
+        if (!examStarted) return;
         tabSwitchCount++;
         if (tabSwitchCount === 1) {
             // Show warning modal
@@ -237,20 +233,124 @@
     // Monitor Window Focus
     window.addEventListener('blur', () => {
         setTimeout(() => {
-            if (!document.hasFocus() && !isFilePickerOpen) {
+            if (!document.hasFocus()) {
                 handleTabSwitch();
             }
         }, 250);
     });
 
-    // Prevent copy, paste, cut, and right-click
-    document.addEventListener('contextmenu', e => e.preventDefault());
-    document.addEventListener('copy', e => e.preventDefault());
-    document.addEventListener('cut', e => e.preventDefault());
-    document.addEventListener('paste', e => e.preventDefault());
+    // Helper to log and auto-submit on clipboard/drag-drop cheating attempt
+    function triggerSecurityViolation(reason) {
+        alert("Security violation detected: " + reason + "\nYour test is being automatically submitted.");
+        form.submit();
+    }
+
+    // Prevent and detect copy, paste, cut, and drop operations using capturing phase listeners
+    // to block attempts to bypass via extensions or other standard bypass scripts.
+    const blockClipboardOrDrag = e => {
+        if (!examStarted) return;
+        e.preventDefault();
+        e.stopPropagation();
+        
+        let type = e.type;
+        let msg = "clipboard action (" + type + ")";
+        if (type === 'drop') {
+            msg = "drag-and-drop text insertion";
+        }
+        triggerSecurityViolation(msg);
+    };
+
+    window.addEventListener('copy', blockClipboardOrDrag, true);
+    window.addEventListener('cut', blockClipboardOrDrag, true);
+    window.addEventListener('paste', blockClipboardOrDrag, true);
+    window.addEventListener('drop', blockClipboardOrDrag, true);
+    
+    // Always call preventDefault on dragover window-wide to prevent drop operations from being permitted
+    window.addEventListener('dragover', e => {
+        e.preventDefault();
+    }, true);
+
+    // Prevent right-click context menu window-wide
+    window.addEventListener('contextmenu', e => {
+        if (!examStarted) return;
+        e.preventDefault();
+        e.stopPropagation();
+    }, true);
+
+    // Monitor input events on all textareas to catch copy-paste or autofill extension bypasses.
+    // If a text length jump > 15 characters occurs in a single event, or if insertFromPaste is fired, we trigger auto-submit.
+    document.querySelectorAll('textarea').forEach(textarea => {
+        let lastLength = textarea.value.length;
+        
+        textarea.addEventListener('input', e => {
+            if (!examStarted) return;
+            const currentLength = textarea.value.length;
+            const delta = currentLength - lastLength;
+            
+            if (e.inputType === 'insertFromPaste' || delta > 15) {
+                triggerSecurityViolation("copy-pasting or auto-filling text");
+            }
+            lastLength = currentLength;
+        });
+    });
+
+    // Background polling running every 200ms to detect bypasses that direct-set .value bypassing input events
+    document.querySelectorAll('textarea').forEach(textarea => {
+        let lastValue = textarea.value;
+        setInterval(() => {
+            if (!examStarted) return;
+            const currentValue = textarea.value;
+            if (currentValue !== lastValue) {
+                const delta = currentValue.length - lastValue.length;
+                // If text length increases by more than 8 characters in 200ms, it is a copy-paste/autofill
+                if (delta > 8) {
+                    triggerSecurityViolation("sudden text insertion (copy-paste/autofill)");
+                }
+                lastValue = currentValue;
+            }
+        }, 200);
+    });
+
+    // Monitor Selection Changes (prevent highlighting/scraping questions/answers)
+    document.addEventListener('selectionchange', () => {
+        if (!examStarted) return;
+        const selection = window.getSelection().toString().trim();
+        if (selection.length > 10) {
+            triggerSecurityViolation("selecting/highlighting text");
+        }
+    });
+
+    // MCQ Anti-Autofill / Automated Solver Protection
+    const trustedRadioChecks = {};
+
+    // Record trusted radio inputs
+    document.querySelectorAll('input[type="radio"]').forEach(radio => {
+        radio.addEventListener('change', e => {
+            if (!examStarted) return;
+            if (e.isTrusted) {
+                trustedRadioChecks[radio.name] = radio.value;
+            } else {
+                triggerSecurityViolation("untrusted programmatic option change");
+            }
+        });
+    });
+
+    // Background polling running every 200ms for MCQs to verify no options were programmatically checked
+    setInterval(() => {
+        if (!examStarted) return;
+        document.querySelectorAll('input[type="radio"]').forEach(radio => {
+            if (radio.checked) {
+                // If a radio is checked, it MUST match the recorded trusted checked value
+                if (trustedRadioChecks[radio.name] !== radio.value) {
+                    triggerSecurityViolation("programmatic answer selection (copy-paste/autofill extension)");
+                }
+            }
+        });
+    }, 200);
 
     // Prevent key shortcuts (F12, DevTools, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+U)
     document.addEventListener('keydown', e => {
+        if (!examStarted) return;
         if (e.key === 'F12' || 
             (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
             (e.ctrlKey && e.key === 'u') ||
@@ -259,8 +359,10 @@
             (e.ctrlKey && e.key === 'x')
         ) {
             e.preventDefault();
+            e.stopPropagation();
+            triggerSecurityViolation("forbidden keyboard shortcut");
         }
-    });
+    }, true);
 </script>
 
 <%@ include file="/common/footer.jsp" %>
