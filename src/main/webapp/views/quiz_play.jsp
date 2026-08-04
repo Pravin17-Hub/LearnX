@@ -91,7 +91,7 @@
 
     <div class="row justify-content-center">
         <div class="col-lg-8">
-            <form action="<%= request.getContextPath() %>/quiz" method="post" id="quizForm">
+            <form action="<%= request.getContextPath() %>/quiz" method="post" id="quizForm" onsubmit="examStarted = false;">
                 <input type="hidden" name="action" value="submit">
                 <input type="hidden" name="guestName" value="<%= (guestName != null) ? guestName : "" %>">
                 

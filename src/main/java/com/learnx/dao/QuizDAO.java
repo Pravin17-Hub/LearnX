@@ -303,6 +303,37 @@ public class QuizDAO {
         return null;
     }
 
+    public Map<String, Object> getStudentAttemptForQuiz(int quizId, int studentId) {
+        String query = "SELECT qa.*, q.title as quiz_title, q.max_marks as quiz_max_marks FROM quiz_attempts qa " +
+                       "JOIN quizzes q ON qa.quiz_id = q.id " +
+                       "WHERE qa.quiz_id = ? AND qa.student_id = ? ORDER BY qa.submit_time DESC LIMIT 1";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(query)) {
+            
+            ps.setInt(1, quizId);
+            ps.setInt(2, studentId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", rs.getInt("id"));
+                    map.put("quizId", rs.getInt("quiz_id"));
+                    map.put("quizTitle", rs.getString("quiz_title"));
+                    map.put("studentId", rs.getInt("student_id"));
+                    map.put("score", rs.getInt("score"));
+                    map.put("maxScore", rs.getInt("max_score"));
+                    map.put("quizMaxMarks", rs.getInt("quiz_max_marks"));
+                    map.put("submitTime", rs.getTimestamp("submit_time"));
+                    map.put("autoSaved", rs.getBoolean("auto_saved"));
+                    map.put("violationReason", rs.getString("violation_reason"));
+                    return map;
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
     public boolean deleteQuiz(int quizId) {
         String deleteAttempts = "DELETE FROM quiz_attempts WHERE quiz_id = ?";
         String deleteQuestions = "DELETE FROM quiz_questions WHERE quiz_id = ?";

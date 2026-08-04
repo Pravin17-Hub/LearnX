@@ -126,8 +126,12 @@ public class QuizServlet extends HttpServlet {
 
                 if ("view".equalsIgnoreCase(action)) {
                     boolean attempted = false;
+                    java.util.Map<String, Object> studentAttempt = null;
                     if (user != null) {
                         attempted = quizDAO.hasStudentAttemptedQuiz(quizId, user.getId());
+                        if (attempted) {
+                            studentAttempt = quizDAO.getStudentAttemptForQuiz(quizId, user.getId());
+                        }
                     }
                     List<Map<String, Object>> leaderboard = quizDAO.getQuizLeaderboard(quizId);
 
@@ -139,6 +143,7 @@ public class QuizServlet extends HttpServlet {
 
                     request.setAttribute("quiz", quiz);
                     request.setAttribute("attempted", attempted);
+                    request.setAttribute("studentAttempt", studentAttempt);
                     request.setAttribute("leaderboard", leaderboard);
                     request.getRequestDispatcher("/views/quiz.jsp").forward(request, response);
                 } else if ("play".equalsIgnoreCase(action)) {

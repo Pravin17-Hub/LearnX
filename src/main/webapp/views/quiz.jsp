@@ -89,10 +89,24 @@
                             </button>
                         </form>
                     <% } else { %>
-                        <% if (attempted) { %>
-                            <div class="alert alert-success border-0 rounded-4 p-3 mb-0">
+                        <% if (attempted) { 
+                            Map<String, Object> studentAttempt = (Map<String, Object>) request.getAttribute("studentAttempt");
+                            int score = studentAttempt != null && studentAttempt.get("score") != null ? (int) studentAttempt.get("score") : 0;
+                            int maxScore = studentAttempt != null && studentAttempt.get("maxScore") != null ? (int) studentAttempt.get("maxScore") : quiz.getMaxMarks();
+                            int attemptId = studentAttempt != null && studentAttempt.get("id") != null ? (int) studentAttempt.get("id") : 0;
+                        %>
+                            <div class="alert alert-success border-0 rounded-4 p-3 mb-3 text-start">
                                 <h6 class="fw-bold mb-1"><i class="fa-solid fa-circle-check me-2"></i>Attempt Completed</h6>
-                                <p class="mb-0 small text-muted">You have already submitted this quiz. Review your score on the leaderboard.</p>
+                                <p class="mb-2 small text-muted">You have already submitted this quiz.</p>
+                                <div class="d-flex align-items-center justify-content-between p-2.5 neumorphic-inset rounded-3 mb-3">
+                                    <span class="small text-muted fw-bold text-uppercase">Your Score:</span>
+                                    <span class="badge bg-success-glass text-success fs-6 px-3 py-1.5 fw-bold"><%= score %> / <%= maxScore %></span>
+                                </div>
+                                <% if (attemptId > 0) { %>
+                                    <a href="<%= request.getContextPath() %>/quiz?action=attempt_result&attemptId=<%= attemptId %>" class="btn btn-sm btn-primary-glass w-100 py-2 rounded-3 text-center fw-semibold">
+                                        <i class="fa-solid fa-eye me-1.5"></i>View Detailed Results
+                                    </a>
+                                <% } %>
                             </div>
                         <% } else { %>
                             <a href="<%= request.getContextPath() %>/quiz?action=play&id=<%= quiz.getId() %>" class="btn btn-primary-glass w-100 py-3 fs-5 rounded-4">
