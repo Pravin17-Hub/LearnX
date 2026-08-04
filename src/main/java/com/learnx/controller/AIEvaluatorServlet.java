@@ -146,6 +146,7 @@ public class AIEvaluatorServlet extends HttpServlet {
     public static void runBackgroundEvaluation(int submissionId, String fullFilePath, String webappRoot) {
         AssignmentDAO aDAO = new AssignmentDAO();
         try {
+            fullFilePath = com.learnx.util.PythonBridge.resolveActualFilePath(fullFilePath);
             Submission sub = aDAO.getSubmissionById(submissionId);
             if (sub == null) return;
 

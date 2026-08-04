@@ -63,6 +63,35 @@ public class PythonBridge {
         return "python"; // Fallback to system default
     }
 
+    public static String resolveActualFilePath(String filePath) {
+        File f = new File(filePath);
+        if (f.exists()) {
+            return f.getAbsolutePath();
+        }
+
+        // Try Kaspersky Sandbox path or Windows Virtual Store
+        if (filePath.contains("learnx_uploads")) {
+            int idx = filePath.indexOf("learnx_uploads");
+            String relPath = filePath.substring(idx + "learnx_uploads".length());
+            
+            // Check C:\KVRT2020_Data\Temp\learnx_uploads
+            File kaspFile = new File("C:\\KVRT2020_Data\\Temp\\learnx_uploads", relPath);
+            if (kaspFile.exists()) {
+                return kaspFile.getAbsolutePath();
+            }
+
+            // Check VirtualStore
+            String localAppData = System.getenv("LOCALAPPDATA");
+            if (localAppData != null) {
+                File vsFile = new File(localAppData, "VirtualStore\\learnx_uploads" + relPath);
+                if (vsFile.exists()) {
+                    return vsFile.getAbsolutePath();
+                }
+            }
+        }
+        return filePath;
+    }
+
     public static String extractText(String filePath, String webappRoot) {
         try {
             executionSemaphore.acquire();
@@ -72,6 +101,8 @@ public class PythonBridge {
         }
 
         try {
+            String actualPath = resolveActualFilePath(filePath);
+            
             // Locate the python script in the deployed context
             String scriptPath = new File(webappRoot, "python/document_extractor.py").getAbsolutePath();
             
@@ -79,7 +110,7 @@ public class PythonBridge {
             List<String> command = new ArrayList<>();
             command.add(resolvePythonCommand());
             command.add(scriptPath);
-            command.add(filePath);
+            command.add(actualPath);
             
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true); // Merge error and output streams

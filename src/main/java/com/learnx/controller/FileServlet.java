@@ -43,6 +43,10 @@ public class FileServlet extends HttpServlet {
             return;
         }
 
+        // Resolve to actual physical path if virtualized (e.g., Kaspersky sandbox)
+        String resolvedPath = com.learnx.util.PythonBridge.resolveActualFilePath(canonicalDest);
+        file = new File(resolvedPath);
+
         // Check if the file exists and is not a directory
         if (!file.exists() || file.isDirectory()) {
             response.sendError(HttpServletResponse.SC_NOT_FOUND);
