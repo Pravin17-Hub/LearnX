@@ -123,17 +123,17 @@ public class OpenAIClient {
                 .build();
 
         String systemPrompt = "You are an expert academic evaluator. You are given the Assignment details, an Answer Key, a Grading Rubric, and the Maximum Marks.\n" +
-                "Evaluate the student's response strictly and methodically by following these steps:\n" +
-                "1. Identify the number of distinct questions/tasks in the assignment from the Answer Key or Rubric.\n" +
-                "2. Determine the marks allocated to each question. If not explicitly specified, divide the Maximum Marks (" + maxMarks + ") equally among all identified questions.\n" +
-                "3. Check the student's response for each question. If a question is not answered or is missing, award exactly 0 marks for it.\n" +
-                "4. For answered questions, grade them strictly against the Answer Key and Rubric.\n" +
-                "5. Calculate the final score as the sum of marks for each question. A student who only answers 1 out of 10 equal questions can get at most 10% of the total marks.\n\n" +
+                "Evaluate the student's response strictly, methodically, and mathematically by following these rules:\n" +
+                "1. COUNT QUESTIONS: First, scan the Answer Key, Rubric, and Assignment description to determine the total number of distinct questions/tasks assigned. (e.g., 10 questions).\n" +
+                "2. ALLOCATE MARKS: Determine the marks allocated to each question. If not explicitly specified, divide the Maximum Marks (" + maxMarks + ") equally among all identified questions (e.g., 10 questions for 100 marks means exactly 10 marks per question).\n" +
+                "3. DETECT MISSING ANSWERS: Compare the student's submission against each question. If a question is not explicitly answered or has no corresponding text in the student's submission, you MUST award exactly 0 marks for that question. Do NOT award partial marks, general credit, or lenient scores for unanswered/missing questions.\n" +
+                "4. STRICT SUM: Calculate the final score as the mathematical sum of the marks obtained for each individual question. Under no circumstances should the final score exceed this sum. For example, if a student only answers 1 out of 10 equal questions (worth 10 marks each), their final score MUST NOT exceed 10/100, even if the single answered question is perfect.\n" +
+                "5. BREAKDOWN IN FEEDBACK: You MUST list the individual question-by-question marks breakdown in the `feedback` JSON property (e.g., 'Question 1: 10/10, Question 2: 0/10 (Missing), ... Total: 10/100') followed by explanations.\n\n" +
                 "Respond ONLY with a JSON object in the following format:\n" +
                 "{\n" +
                 "  \"score\": 85,\n" +
                 "  \"confidence\": 95.0,\n" +
-                "  \"feedback\": \"Detailed feedback about the grading, including a question-by-question marks breakdown and explanation of why marks were deducted or awarded.\",\n" +
+                "  \"feedback\": \"[Mandatory Question-by-Question Marks Breakdown here] Detailed feedback about the grading, explaining why marks were deducted or awarded.\",\n" +
                 "  \"strengths\": \"Key positive elements of the student's answer.\",\n" +
                 "  \"weaknesses\": \"Areas where the answer falls short or is missing.\",\n" +
                 "  \"missing_concepts\": \"Important definitions or concepts from the answer key that are absent or unanswered in the student's response.\"\n" +
