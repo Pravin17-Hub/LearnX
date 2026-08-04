@@ -22,33 +22,47 @@ public class DBConnection {
         dataSource.setUsername(user);
         dataSource.setPassword(password);
 
-        // Configure connection pooling properties for production load and performance
-        dataSource.setInitialSize(5);      // Start with 5 pre-opened connections
-        dataSource.setMaxTotal(25);        // Allow up to 25 connections under heavy loads
-        dataSource.setMaxIdle(10);         // Max 10 idle connections kept in pool
-        dataSource.setMinIdle(5);          // Keep at least 5 idle connections active
-        dataSource.setMaxWaitMillis(10000); // Wait up to 10 seconds for a connection if busy
+        // Configure connection pooling properties with env-var overrides and higher production defaults
+        String envInitSize = System.getenv("DB_INITIAL_SIZE");
+        String envMaxTotal = System.getenv("DB_MAX_TOTAL");
+        String envMaxIdle = System.getenv("DB_MAX_IDLE");
+        String envMinIdle = System.getenv("DB_MIN_IDLE");
+        String envMaxWait = System.getenv("DB_MAX_WAIT_MILLIS");
+
+        dataSource.setInitialSize(envInitSize != null ? Integer.parseInt(envInitSize) : 10);
+        dataSource.setMaxTotal(envMaxTotal != null ? Integer.parseInt(envMaxTotal) : 100);
+        dataSource.setMaxIdle(envMaxIdle != null ? Integer.parseInt(envMaxIdle) : 50);
+        dataSource.setMinIdle(envMinIdle != null ? Integer.parseInt(envMinIdle) : 10);
+        dataSource.setMaxWaitMillis(envMaxWait != null ? Long.parseLong(envMaxWait) : 10000);
 
         // Connection health checks
         dataSource.setTestOnBorrow(true);
         dataSource.setValidationQuery("SELECT 1");
-
-        // Run dynamic database migration to ensure violation_reason column exists
-        try (Connection conn = dataSource.getConnection();
-             Statement stmt = conn.createStatement()) {
-            try {
-                stmt.execute("ALTER TABLE quiz_attempts ADD COLUMN violation_reason VARCHAR(255) NULL");
-                System.out.println("LearnX DB Migration: Added violation_reason column to quiz_attempts.");
-            } catch (SQLException e) {
-                // Column probably already exists or table does not exist yet (during schema init)
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
     }
 
     public static Connection getConnection() throws SQLException {
         return dataSource.getConnection();
+    }
+
+    public static String getUploadDir() {
+        String envUploadDir = System.getenv("UPLOAD_DIR");
+        String path;
+        if (envUploadDir != null && !envUploadDir.trim().isEmpty()) {
+            path = envUploadDir;
+        } else {
+            // Safe cross-platform fallback that doesn't get cleared by Tomcat deployment wipes
+            String os = System.getProperty("os.name").toLowerCase();
+            if (os.contains("win")) {
+                path = "C:\\learnx_uploads";
+            } else {
+                path = "/var/learnx_uploads";
+            }
+        }
+        java.io.File dir = new java.io.File(path);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+        return path;
     }
 
     public static String resolveAvatarPath(String path) {

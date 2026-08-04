@@ -115,7 +115,7 @@ public class AssignmentServlet extends HttpServlet {
         String rubric = request.getParameter("rubric");
 
         // Handle question sheet file upload (optional)
-        String uploadPath = getServletContext().getRealPath("") + File.separator + "uploads" + File.separator + "assignments";
+        String uploadPath = com.learnx.util.DBConnection.getUploadDir() + File.separator + "assignments";
         File uploadDir = new File(uploadPath);
         if (!uploadDir.exists()) uploadDir.mkdirs();
 
@@ -164,7 +164,7 @@ public class AssignmentServlet extends HttpServlet {
         String assignmentIdStr = request.getParameter("assignmentId");
 
         // Handle answer sheet file upload
-        String uploadPath = getServletContext().getRealPath("") + File.separator + "uploads" + File.separator + "assignments";
+        String uploadPath = com.learnx.util.DBConnection.getUploadDir() + File.separator + "assignments";
         File uploadDir = new File(uploadPath);
         if (!uploadDir.exists()) uploadDir.mkdirs();
 
@@ -194,7 +194,7 @@ public class AssignmentServlet extends HttpServlet {
                 int submissionId = s.getId();
                 String webappRoot = getServletContext().getRealPath("");
                 
-                new Thread(() -> {
+                com.learnx.util.BackgroundTaskManager.runAsync(() -> {
                     try {
                         // Call the AI Evaluator service logic
                         com.learnx.controller.AIEvaluatorServlet.runBackgroundEvaluation(submissionId, fullSavePath, webappRoot);
@@ -202,7 +202,7 @@ public class AssignmentServlet extends HttpServlet {
                         System.err.println("Background AI Evaluation failed for submission " + submissionId);
                         e.printStackTrace();
                     }
-                }).start();
+                });
 
                 response.sendRedirect(request.getContextPath() + "/assignment?id=" + assignmentId + "&msg=submitted");
             } else {

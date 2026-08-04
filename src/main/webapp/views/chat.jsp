@@ -103,7 +103,44 @@
 <!-- Chat Engine Script -->
 <script>
     let activePartnerId = null;
-    let pollInterval = null;
+    let socket = null;
+
+    function connectWebSocket() {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const host = window.location.host;
+        const contextPath = "<%= request.getContextPath() %>";
+        const socketUrl = `${protocol}//${host}${contextPath}/chatSocket/<%= currentUser.getId() %>`;
+
+        socket = new WebSocket(socketUrl);
+
+        socket.onopen = function() {
+            console.log("Chat WebSocket connected.");
+        };
+
+        socket.onmessage = function(event) {
+            const msg = JSON.parse(event.data);
+            if (activePartnerId && (msg.senderId === activePartnerId || msg.receiverId === activePartnerId)) {
+                fetchHistory();
+            } else {
+                const unreadBadge = document.getElementById(`unread-badge-${msg.senderId}`);
+                if (unreadBadge) {
+                    unreadBadge.classList.remove('d-none');
+                }
+            }
+        };
+
+        socket.onclose = function() {
+            console.log("Chat WebSocket disconnected. Reconnecting in 5 seconds...");
+            setTimeout(connectWebSocket, 5000);
+        };
+
+        socket.onerror = function(err) {
+            console.error("Chat WebSocket error:", err);
+            socket.close();
+        };
+    }
+
+    connectWebSocket();
 
     function loadChatPartner(userId, username, avatarUrl) {
         activePartnerId = userId;
@@ -113,12 +150,14 @@
         // Show input form
         document.getElementById('chatForm').classList.remove('d-none');
         
+        // Hide unread badge
+        const unreadBadge = document.getElementById(`unread-badge-${userId}`);
+        if (unreadBadge) {
+            unreadBadge.classList.add('d-none');
+        }
+        
         // Load messages history
         fetchHistory();
-        
-        // Setup polling every 3 seconds to fetch new messages
-        if (pollInterval) clearInterval(pollInterval);
-        pollInterval = setInterval(fetchHistory, 3000);
     }
 
     function fetchHistory() {

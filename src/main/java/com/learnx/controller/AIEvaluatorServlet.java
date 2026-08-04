@@ -114,15 +114,24 @@ public class AIEvaluatorServlet extends HttpServlet {
             } else if ("reevaluate".equalsIgnoreCase(action)) {
                 // Trigger background evaluation thread
                 String webappRoot = getServletContext().getRealPath("");
-                String fullFilePath = webappRoot + sub.getFilePath().replace("/", File.separator);
+                String subPath = sub.getFilePath();
+                if (subPath.startsWith("/uploads")) {
+                    subPath = subPath.substring(8);
+                } else if (subPath.startsWith("uploads")) {
+                    subPath = subPath.substring(7);
+                }
+                if (!subPath.startsWith("/") && !subPath.startsWith("\\")) {
+                    subPath = File.separator + subPath;
+                }
+                String fullFilePath = com.learnx.util.DBConnection.getUploadDir() + subPath.replace("/", File.separator);
                 
-                new Thread(() -> {
+                com.learnx.util.BackgroundTaskManager.runAsync(() -> {
                     try {
                         runBackgroundEvaluation(submissionId, fullFilePath, webappRoot);
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
-                }).start();
+                });
 
                 response.sendRedirect(request.getContextPath() + "/assignment?id=" + sub.getAssignmentId() + "&msg=reevaluating");
             } else {

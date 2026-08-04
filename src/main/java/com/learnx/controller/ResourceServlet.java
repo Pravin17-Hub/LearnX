@@ -78,7 +78,7 @@ public class ResourceServlet extends HttpServlet {
         String classIdStr = request.getParameter("classroomId");
 
         // Handle multipart upload
-        String uploadPath = getServletContext().getRealPath("") + File.separator + "uploads" + File.separator + "materials";
+        String uploadPath = com.learnx.util.DBConnection.getUploadDir() + File.separator + "materials";
         File uploadDir = new File(uploadPath);
         if (!uploadDir.exists()) uploadDir.mkdirs();
 
@@ -149,7 +149,10 @@ public class ResourceServlet extends HttpServlet {
 
             // Locate file
             String relativePath = material.getFilePath();
-            String fullPath = getServletContext().getRealPath("") + relativePath.replace("/", File.separator);
+            if (relativePath.startsWith("/uploads")) {
+                relativePath = relativePath.substring(8);
+            }
+            String fullPath = com.learnx.util.DBConnection.getUploadDir() + relativePath.replace("/", File.separator);
             File downloadFile = new File(fullPath);
 
             if (!downloadFile.exists()) {

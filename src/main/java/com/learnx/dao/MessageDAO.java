@@ -71,11 +71,13 @@ public class MessageDAO {
 
     public List<Message> getChatHistory(int senderId, int receiverId) {
         List<Message> list = new ArrayList<>();
-        String query = "SELECT pm.*, u1.username as sender_name, u2.username as receiver_name FROM private_messages pm " +
-                       "JOIN users u1 ON pm.sender_id = u1.id " +
-                       "JOIN users u2 ON pm.receiver_id = u2.id " +
-                       "WHERE (pm.sender_id = ? AND pm.receiver_id = ?) OR (pm.sender_id = ? AND pm.receiver_id = ?) " +
-                       "ORDER BY pm.created_at ASC";
+        String query = "SELECT * FROM (" +
+                       "  SELECT pm.*, u1.username as sender_name, u2.username as receiver_name FROM private_messages pm " +
+                       "  JOIN users u1 ON pm.sender_id = u1.id " +
+                       "  JOIN users u2 ON pm.receiver_id = u2.id " +
+                       "  WHERE (pm.sender_id = ? AND pm.receiver_id = ?) OR (pm.sender_id = ? AND pm.receiver_id = ?) " +
+                       "  ORDER BY pm.created_at DESC LIMIT 100" +
+                       ") sub ORDER BY sub.created_at ASC";
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(query)) {
             

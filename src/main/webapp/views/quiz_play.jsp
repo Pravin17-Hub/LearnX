@@ -60,9 +60,20 @@
         <div class="glass-card text-center p-5 border border-danger shadow-lg animate-pulse" style="max-width: 500px; background: rgba(20, 20, 20, 0.7); border-radius: 20px;">
             <i class="fa-solid fa-triangle-exclamation text-danger fs-1 mb-4"></i>
             <h3 class="fw-bold mb-3 text-danger">Cheating Warning!</h3>
-            <p class="mb-4 text-light">You navigated away or switched tabs/windows. This is your <strong>first and final warning</strong>.</p>
-            <p class="mb-4 text-muted small">Any further tab switching, window minimization, or focus loss will cause your quiz to be <strong>submitted automatically</strong>.</p>
+            <p class="mb-4 text-light">You navigated away, switched tabs/windows, or exited fullscreen. This is your <strong>first warning</strong>.</p>
+            <p class="mb-4 text-muted small">Any further tab switching, window minimization, or focus loss will result in a registered security violation.</p>
             <button type="button" class="btn btn-danger px-4 py-2.5 rounded-pill fw-bold" onclick="dismissWarning()">I Understand</button>
+        </div>
+    </div>
+
+    <!-- Violation Modal Overlay -->
+    <div id="violationModal" class="d-none" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); backdrop-filter: blur(15px); z-index: 9999; display: none; align-items: center; justify-content: center; color: white;">
+        <div class="glass-card text-center p-5 border border-warning shadow-lg animate-pulse" style="max-width: 500px; background: rgba(25, 20, 20, 0.8); border-radius: 20px;">
+            <i class="fa-solid fa-shield-halved text-warning fs-1 mb-4"></i>
+            <h3 class="fw-bold mb-3 text-warning">Security Violation!</h3>
+            <p class="mb-4 text-light">You navigated away from the secure exam environment again. This is a <strong>registered violation</strong>.</p>
+            <p class="mb-4 text-muted small">Clicking 'Okay' will redirect you back to the exam in Fullscreen. <strong>One more violation</strong> will result in automatic submission and exit.</p>
+            <button type="button" class="btn btn-warning px-4 py-2.5 rounded-pill fw-bold text-dark" onclick="dismissViolation()">Okay</button>
         </div>
     </div>
 
@@ -190,7 +201,7 @@
             !document.mozFullScreen && 
             !document.msFullscreenElement &&
             examStarted) {
-            triggerSecurityViolation("exiting fullscreen mode");
+            handleSecurityViolationEvent("exiting fullscreen mode");
         }
     };
 
@@ -201,21 +212,46 @@
 
     // Anti-cheating Security System
     let isWindowFocused = true;
-    let tabSwitchCount = 0;
+    let securityViolationCount = 0;
 
-    function handleTabSwitch() {
+    function handleSecurityViolationEvent(reason) {
         if (!examStarted) return;
+        
+        // If a warning/violation modal is currently active, ignore secondary event triggers
+        const warningVisible = document.getElementById('warningModal').style.display === 'flex';
+        const violationVisible = document.getElementById('violationModal').style.display === 'flex';
+        if (warningVisible || violationVisible) {
+            return;
+        }
+
         if (!isWindowFocused) return; // Prevent double-triggering in the same blur cycle
         
         isWindowFocused = false;
-        tabSwitchCount++;
-        if (tabSwitchCount === 1) {
-            // Show warning modal
+        securityViolationCount++;
+        
+        if (securityViolationCount === 1) {
+            // First warning
             const modal = document.getElementById('warningModal');
             modal.classList.remove('d-none');
             modal.style.display = 'flex';
-        } else if (tabSwitchCount >= 2) {
-            triggerSecurityViolation("tab switching / focus loss");
+        } else if (securityViolationCount === 2) {
+            // Second warning: violation warning with Okay button
+            const modal = document.getElementById('violationModal');
+            modal.classList.remove('d-none');
+            modal.style.display = 'flex';
+        } else if (securityViolationCount >= 3) {
+            // Third time: submit and exit
+            triggerSecurityViolation(reason);
+        }
+    }
+
+    function reEnterFullscreen() {
+        const docEl = document.documentElement;
+        const requestFS = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullscreen || docEl.msRequestFullscreen;
+        if (requestFS) {
+            requestFS.call(docEl).catch(err => {
+                console.log("Error re-entering fullscreen: " + err.message);
+            });
         }
     }
 
@@ -224,12 +260,21 @@
         modal.classList.add('d-none');
         modal.style.display = 'none';
         isWindowFocused = true; // reset focus flag
+        reEnterFullscreen();
+    }
+
+    function dismissViolation() {
+        const modal = document.getElementById('violationModal');
+        modal.classList.add('d-none');
+        modal.style.display = 'none';
+        isWindowFocused = true; // reset focus flag
+        reEnterFullscreen();
     }
 
     // Monitor Visibility State
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
-            handleTabSwitch();
+            handleSecurityViolationEvent("tab switching / focus loss");
         } else if (document.visibilityState === 'visible') {
             isWindowFocused = true;
         }
@@ -239,7 +284,7 @@
     window.addEventListener('blur', () => {
         setTimeout(() => {
             if (!document.hasFocus()) {
-                handleTabSwitch();
+                handleSecurityViolationEvent("tab switching / focus loss");
             }
         }, 250);
     });
@@ -247,6 +292,61 @@
     window.addEventListener('focus', () => {
         isWindowFocused = true;
     });
+
+    // --- Enhanced Anti-Extension Detection Layers ---
+
+    // 1. Browser Timer Throttling Check
+    // Detects tab switching even if extensions block focus/blur or visibilitychange events.
+    let lastIntervalTime = Date.now();
+    setInterval(() => {
+        if (!examStarted) return;
+        const now = Date.now();
+        const diff = now - lastIntervalTime;
+        lastIntervalTime = now;
+        if (diff > 1500) { 
+            handleSecurityViolationEvent("tab switching (detected via background timer throttling)");
+        }
+    }, 200);
+
+    // 2. requestAnimationFrame Suspension Check
+    // Detects inactive background rendering when the tab is hidden.
+    let lastFrameTime = Date.now();
+    function checkFrame() {
+        if (examStarted) {
+            const now = Date.now();
+            const diff = now - lastFrameTime;
+            if (diff > 2000) {
+                handleSecurityViolationEvent("tab switching (detected via frame suspension)");
+            }
+        }
+        lastFrameTime = Date.now();
+        requestAnimationFrame(checkFrame);
+    }
+    requestAnimationFrame(checkFrame);
+
+    // 3. Visibility API Tampering & Hooking Detection
+    // Detects cheat extensions that override document.visibilityState or document.hidden properties.
+    function detectVisibilityTampering() {
+        try {
+            const descriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState');
+            if (descriptor && descriptor.get) {
+                const getterStr = descriptor.get.toString();
+                if (!getterStr.includes('[native code]')) {
+                    triggerSecurityViolation("unauthorized modification of visibility API (cheating extension)");
+                }
+            }
+            const hiddenDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden');
+            if (hiddenDescriptor && hiddenDescriptor.get) {
+                const getterStr = hiddenDescriptor.get.toString();
+                if (!getterStr.includes('[native code]')) {
+                    triggerSecurityViolation("unauthorized modification of visibility API (cheating extension)");
+                }
+            }
+        } catch (e) {
+            console.log("Anti-tamper check: ", e);
+        }
+    }
+    setInterval(detectVisibilityTampering, 1000);
 
     // Helper to log and auto-submit on clipboard/drag-drop cheating attempt
     function triggerSecurityViolation(reason) {

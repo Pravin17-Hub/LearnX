@@ -118,7 +118,7 @@ public class CommunityServlet extends HttpServlet {
         String type = request.getParameter("type"); // text, note, video, project, announcement
 
         // Handle optional post attachment file upload
-        String uploadPath = getServletContext().getRealPath("") + File.separator + "uploads" + File.separator + "materials";
+        String uploadPath = com.learnx.util.DBConnection.getUploadDir() + File.separator + "materials";
         File uploadDir = new File(uploadPath);
         if (!uploadDir.exists()) uploadDir.mkdirs();
 

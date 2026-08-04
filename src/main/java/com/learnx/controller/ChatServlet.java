@@ -101,7 +101,7 @@ public class ChatServlet extends HttpServlet {
                 if (filePart != null && filePart.getSize() > 0) {
                     String submittedFileName = filePart.getSubmittedFileName();
                     if (submittedFileName != null && !submittedFileName.isEmpty()) {
-                        String uploadPath = getServletContext().getRealPath("") + File.separator + "uploads" + File.separator + "chat";
+                        String uploadPath = com.learnx.util.DBConnection.getUploadDir() + File.separator + "chat";
                         File uploadDir = new File(uploadPath);
                         if (!uploadDir.exists()) uploadDir.mkdirs();
 
@@ -139,6 +139,7 @@ public class ChatServlet extends HttpServlet {
 
             response.setContentType("application/json");
             if (messageDAO.sendMessage(msg)) {
+                com.learnx.websocket.ChatWebSocket.notifyNewMessage(msg);
                 response.getWriter().write(gson.toJson(msg));
             } else {
                 response.getWriter().write("{\"error\":\"Failed to send message\"}");

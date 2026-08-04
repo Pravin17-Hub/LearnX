@@ -9,6 +9,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
+import java.util.ArrayList;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -30,42 +32,43 @@ public class OpenAIClient {
             return key.trim();
         }
 
-        // 2. Try $HOME/.env
+        // 2. Try list of candidate .env files
+        List<File> envFiles = new ArrayList<>();
+        
+        // 2a. Try $HOME/.env
         String homeDir = System.getProperty("user.home");
-        File envFile = new File(homeDir, ".env");
-        if (envFile.exists()) {
-            try (BufferedReader br = new BufferedReader(new FileReader(envFile))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    line = line.trim();
-                    if (line.startsWith("GROQ_API_KEY=")) {
-                        return cleanValue(line.substring("GROQ_API_KEY=".length()).trim());
-                    }
-                    if (line.startsWith("OPENAI_API_KEY=")) {
-                        return cleanValue(line.substring("OPENAI_API_KEY=".length()).trim());
-                    }
-                }
-            } catch (Exception e) {
-                System.err.println("Error reading .env file from user home: " + e.getMessage());
-            }
+        if (homeDir != null) {
+            envFiles.add(new File(homeDir, ".env"));
         }
         
-        // 3. Fallback to current folder .env
-        File localEnv = new File(".env");
-        if (localEnv.exists()) {
-            try (BufferedReader br = new BufferedReader(new FileReader(localEnv))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    line = line.trim();
-                    if (line.startsWith("GROQ_API_KEY=")) {
-                        return cleanValue(line.substring("GROQ_API_KEY=".length()).trim());
+        // 2b. Try USERPROFILE environment variable
+        String userProfile = System.getenv("USERPROFILE");
+        if (userProfile != null) {
+            envFiles.add(new File(userProfile, ".env"));
+        }
+        
+        // 2c. Hardcoded fallback for local developer path
+        envFiles.add(new File("C:\\Users\\Dell\\.env"));
+        
+        // 2d. Fallback to current folder .env
+        envFiles.add(new File(".env"));
+
+        for (File envFile : envFiles) {
+            if (envFile.exists()) {
+                try (BufferedReader br = new BufferedReader(new FileReader(envFile))) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        line = line.trim();
+                        if (line.startsWith("GROQ_API_KEY=")) {
+                            return cleanValue(line.substring("GROQ_API_KEY=".length()).trim());
+                        }
+                        if (line.startsWith("OPENAI_API_KEY=")) {
+                            return cleanValue(line.substring("OPENAI_API_KEY=".length()).trim());
+                        }
                     }
-                    if (line.startsWith("OPENAI_API_KEY=")) {
-                        return cleanValue(line.substring("OPENAI_API_KEY=".length()).trim());
-                    }
+                } catch (Exception e) {
+                    System.err.println("Error reading .env file at " + envFile.getAbsolutePath() + ": " + e.getMessage());
                 }
-            } catch (Exception e) {
-                System.err.println("Error reading local .env file: " + e.getMessage());
             }
         }
 
@@ -115,7 +118,9 @@ public class OpenAIClient {
             throw new IllegalStateException("API Key is missing. Please set GROQ_API_KEY or OPENAI_API_KEY in your environment or ~/.env file.");
         }
 
-        HttpClient client = HttpClient.newHttpClient();
+        HttpClient client = HttpClient.newBuilder()
+                .connectTimeout(java.time.Duration.ofSeconds(10))
+                .build();
 
         String systemPrompt = "You are an expert academic evaluator. You are given a Question, an Answer Key, a Grading Rubric, and the Maximum Marks. " +
                 "Evaluate the student's answer based strictly on the rubric and comparison with the answer key. " +
@@ -159,6 +164,7 @@ public class OpenAIClient {
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(getApiUrl(key)))
+                .timeout(java.time.Duration.ofSeconds(30))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + key)
                 .POST(HttpRequest.BodyPublishers.ofString(requestJson.toString(), StandardCharsets.UTF_8))
@@ -182,7 +188,9 @@ public class OpenAIClient {
         String mimeType = fileType.equalsIgnoreCase("png") ? "image/png" : "image/jpeg";
         String dataUrl = "data:" + mimeType + ";base64," + base64Image;
 
-        HttpClient client = HttpClient.newHttpClient();
+        HttpClient client = HttpClient.newBuilder()
+                .connectTimeout(java.time.Duration.ofSeconds(10))
+                .build();
 
         // Build form-urlencoded request body for OCR.space
         String requestBody = "apikey=helloworld" +
@@ -192,6 +200,7 @@ public class OpenAIClient {
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://api.ocr.space/parse/image"))
+                .timeout(java.time.Duration.ofSeconds(20))
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();

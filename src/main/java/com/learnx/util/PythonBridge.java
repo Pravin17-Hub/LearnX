@@ -6,16 +6,78 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Semaphore;
 
 public class PythonBridge {
+    // Semaphore to limit concurrent Python executions to prevent CPU exhaustion
+    private static final Semaphore executionSemaphore = new Semaphore(4);
+
+    private static String resolvePythonCommand() {
+        // 1. Try standard "python" command
+        try {
+            Process p = Runtime.getRuntime().exec(new String[]{"python", "--version"});
+            if (p.waitFor() == 0) {
+                return "python";
+            }
+        } catch (Exception e) {}
+
+        // 2. Try "python3" command
+        try {
+            Process p = Runtime.getRuntime().exec(new String[]{"python3", "--version"});
+            if (p.waitFor() == 0) {
+                return "python3";
+            }
+        } catch (Exception e) {}
+
+        // 3. Try standard developer user paths for Dell
+        String[] fallbackPaths = {
+            "C:\\Users\\Dell\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+            "C:\\Users\\Dell\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+            "C:\\Users\\Dell\\AppData\\Local\\Programs\\Python\\Python310\\python.exe",
+            "C:\\Users\\Dell\\AppData\\Local\\Programs\\Python\\Python39\\python.exe",
+            "C:\\Users\\Dell\\AppData\\Local\\Programs\\Python\\Python38\\python.exe"
+        };
+        for (String path : fallbackPaths) {
+            if (new File(path).exists()) {
+                return path;
+            }
+        }
+
+        // 4. Inspect LOCALAPPDATA directory dynamically
+        String localAppData = System.getenv("LOCALAPPDATA");
+        if (localAppData != null) {
+            File pyDir = new File(localAppData, "Programs\\Python");
+            if (pyDir.exists() && pyDir.isDirectory()) {
+                File[] subdirs = pyDir.listFiles();
+                if (subdirs != null) {
+                    for (File subdir : subdirs) {
+                        File pyExe = new File(subdir, "python.exe");
+                        if (pyExe.exists()) {
+                            return pyExe.getAbsolutePath();
+                        }
+                    }
+                }
+            }
+        }
+
+        return "python"; // Fallback to system default
+    }
+
     public static String extractText(String filePath, String webappRoot) {
+        try {
+            executionSemaphore.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return "ERROR: Extraction interrupted while waiting in queue.";
+        }
+
         try {
             // Locate the python script in the deployed context
             String scriptPath = new File(webappRoot, "python/document_extractor.py").getAbsolutePath();
             
             // Build process execution command
             List<String> command = new ArrayList<>();
-            command.add("python");
+            command.add(resolvePythonCommand());
             command.add(scriptPath);
             command.add(filePath);
             
@@ -44,6 +106,8 @@ public class PythonBridge {
         } catch (Exception e) {
             e.printStackTrace();
             return "ERROR: Failed to run Python subprocess: " + e.getMessage();
+        } finally {
+            executionSemaphore.release();
         }
     }
 }

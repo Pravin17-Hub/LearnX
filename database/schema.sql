@@ -270,6 +270,7 @@ CREATE TABLE IF NOT EXISTS quiz_attempts (
     max_score INT DEFAULT 0,
     answers_json TEXT NULL,
     ai_feedback TEXT NULL,
+    violation_reason VARCHAR(255) NULL,
     start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     submit_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     auto_saved BOOLEAN DEFAULT FALSE,

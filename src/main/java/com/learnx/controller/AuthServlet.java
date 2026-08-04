@@ -128,7 +128,7 @@ public class AuthServlet extends HttpServlet {
         try {
             Part part = request.getPart("avatar_file");
             if (part != null && part.getSize() > 0) {
-                String uploadPath = getServletContext().getRealPath("") + java.io.File.separator + "uploads" + java.io.File.separator + "avatars";
+                String uploadPath = com.learnx.util.DBConnection.getUploadDir() + java.io.File.separator + "avatars";
                 java.io.File uploadDir = new java.io.File(uploadPath);
                 if (!uploadDir.exists()) uploadDir.mkdirs();
                 
@@ -193,7 +193,7 @@ public class AuthServlet extends HttpServlet {
         }
         
         if (part != null && part.getSize() > 0) {
-            String uploadPath = getServletContext().getRealPath("") + java.io.File.separator + "uploads" + java.io.File.separator + "avatars";
+            String uploadPath = com.learnx.util.DBConnection.getUploadDir() + java.io.File.separator + "avatars";
             java.io.File uploadDir = new java.io.File(uploadPath);
             if (!uploadDir.exists()) uploadDir.mkdirs();
             
