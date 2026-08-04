@@ -122,18 +122,23 @@ public class OpenAIClient {
                 .connectTimeout(java.time.Duration.ofSeconds(10))
                 .build();
 
-        String systemPrompt = "You are an expert academic evaluator. You are given a Question, an Answer Key, a Grading Rubric, and the Maximum Marks. " +
-                "Evaluate the student's answer based strictly on the rubric and comparison with the answer key. " +
+        String systemPrompt = "You are an expert academic evaluator. You are given the Assignment details, an Answer Key, a Grading Rubric, and the Maximum Marks.\n" +
+                "Evaluate the student's response strictly and methodically by following these steps:\n" +
+                "1. Identify the number of distinct questions/tasks in the assignment from the Answer Key or Rubric.\n" +
+                "2. Determine the marks allocated to each question. If not explicitly specified, divide the Maximum Marks (" + maxMarks + ") equally among all identified questions.\n" +
+                "3. Check the student's response for each question. If a question is not answered or is missing, award exactly 0 marks for it.\n" +
+                "4. For answered questions, grade them strictly against the Answer Key and Rubric.\n" +
+                "5. Calculate the final score as the sum of marks for each question. A student who only answers 1 out of 10 equal questions can get at most 10% of the total marks.\n\n" +
                 "Respond ONLY with a JSON object in the following format:\n" +
                 "{\n" +
                 "  \"score\": 85,\n" +
                 "  \"confidence\": 95.0,\n" +
-                "  \"feedback\": \"Detailed feedback about the grading, explaining why marks were deducted or awarded.\",\n" +
+                "  \"feedback\": \"Detailed feedback about the grading, including a question-by-question marks breakdown and explanation of why marks were deducted or awarded.\",\n" +
                 "  \"strengths\": \"Key positive elements of the student's answer.\",\n" +
-                "  \"weaknesses\": \"Areas where the answer falls short.\",\n" +
-                "  \"missing_concepts\": \"Important definitions or concepts from the answer key that are absent in the student's response.\"\n" +
+                "  \"weaknesses\": \"Areas where the answer falls short or is missing.\",\n" +
+                "  \"missing_concepts\": \"Important definitions or concepts from the answer key that are absent or unanswered in the student's response.\"\n" +
                 "}\n" +
-                "Ensure the score is an integer between 0 and " + maxMarks + " (scale the score directly proportionate to the Maximum Marks; do NOT evaluate out of 100 unless the Maximum Marks is 100). The response must be valid JSON and contain no other text.";
+                "Ensure the score is an integer between 0 and " + maxMarks + ". The response must be valid JSON and contain no other text.";
 
         String userContent = String.format("Question: %s\n\nAnswer Key: %s\n\nRubric: %s\n\nMaximum Marks: %d\n\nStudent Answer: %s", 
                 question, answerKey, rubric, maxMarks, studentAnswer);
