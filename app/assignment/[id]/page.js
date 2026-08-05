@@ -238,6 +238,24 @@ export default function AssignmentDetailsPage() {
     }
   };
 
+  const handleDeleteSubmission = async (submissionId) => {
+    if (!confirm('Are you sure you want to permanently delete this student submission? All grading, feedback, and records will be deleted, and the student will be allowed to submit again.')) return;
+    try {
+      const { error } = await supabase
+        .from('assignment_submissions')
+        .delete()
+        .eq('id', submissionId);
+
+      if (error) throw error;
+
+      alert('Submission deleted successfully.');
+      setSelectedSub(null);
+      loadAssignmentData(); // Reload student list
+    } catch (err) {
+      alert(`Delete failed: ${err.message}`);
+    }
+  };
+
   const handleDownloadExcel = () => {
     if (!submissionsList || submissionsList.length === 0) {
       alert('No submissions available to download.');
@@ -466,15 +484,7 @@ export default function AssignmentDetailsPage() {
                           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{submission.missing_concepts}</p>
                         </div>
                       )}
-                      <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
-                        <button 
-                          className="btn btn-secondary" 
-                          onClick={() => setIsResubmitting(true)}
-                          style={{ fontSize: '0.85rem', padding: '0.5rem 1.2rem' }}
-                        >
-                          🔄 Re-submit Answer Sheet
-                        </button>
-                      </div>
+                      {/* Re-submission disabled per policy */}
                     </div>
                   </div>
                 )}
@@ -495,17 +505,26 @@ export default function AssignmentDetailsPage() {
                         <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>Grading Review: {selectedSub.users?.name}</h3>
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>Email: {selectedSub.users?.email}</p>
                       </div>
-                      {selectedSub.file_path && (
-                        <a
-                          href={selectedSub.file_path}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-secondary"
-                          style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {selectedSub.file_path && (
+                          <a
+                            href={selectedSub.file_path}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-secondary"
+                            style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+                          >
+                            📄 View Uploaded File
+                          </a>
+                        )}
+                        <button
+                          onClick={() => handleDeleteSubmission(selectedSub.id)}
+                          className="btn"
+                          style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', background: '#fee2e2', color: '#dc2626', border: 'none' }}
                         >
-                          📄 View Uploaded File
-                        </a>
-                      )}
+                          🗑️ Delete Submission
+                        </button>
+                      </div>
                     </div>
 
                     {gradingActionMsg && <div className="alert alert-success">{gradingActionMsg}</div>}
