@@ -1,14 +1,25 @@
-# Use official lightweight Tomcat image with Java 17
-FROM tomcat:9-jdk17-openjdk-slim
+# Use official lightweight Node.js Alpine image
+FROM node:18-alpine
 
-# Set environment variables
-ENV CATALINA_HOME /usr/local/tomcat
-ENV PATH $CATALINA_HOME/bin:$PATH
+# Set working directory
+WORKDIR /app
 
-# Copy the pre-built WAR file as the ROOT application
-# (This makes your website load directly at https://your-site.onrender.com/)
-COPY LearnX.war /usr/local/tomcat/webapps/ROOT.war
+# Install dependencies first (leverages Docker cache)
+COPY package*.json ./
+RUN npm install
 
-EXPOSE 8080
+# Copy application source code
+COPY . .
 
-CMD ["catalina.sh", "run"]
+# Set production environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Build Next.js application
+RUN npm run build
+
+# Expose port
+EXPOSE 3000
+
+# Start Next.js production server
+CMD ["npm", "start"]
