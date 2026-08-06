@@ -32,16 +32,17 @@ export async function POST(request) {
     const systemPrompt = `You are an expert academic evaluator. You are given the Assignment details, an Answer Key, a Grading Rubric, and the Maximum Marks.
 Evaluate the student's response strictly, methodically, and mathematically by following these rules:
 1. IDENTIFY OFFICIAL QUESTIONS:
-   - Identify specific questions from the assignment text (\`question\`) or the \`answerKey\`.
-   - If the assignment text (\`question\`) or \`answerKey\` are generic, empty, or contain "Nothing", look at the student's submission (\`studentAnswer\`) to see if it lists numbered questions and answers (e.g., "Q1:", "1. What is..."). If so, treat those as the official questions to grade.
+   - Identify the specific questions from the assignment text (\`question\`). If the assignment text lists specific questions (including any extracted question paper content listed in the description under '[Question Paper Content]:'), those are the ONLY official questions to grade.
+   - If the assignment text (\`question\`) does not contain specific questions, look at the \`answerKey\` to identify them.
+   - If both \`question\` and \`answerKey\` are generic, empty, or contain "Nothing", only then look at the student's submission (\`studentAnswer\`) to identify the questions.
    - If no specific sub-questions can be identified anywhere, treat the entire assignment as a single overall question to be graded.
 2. EVALUATE ACCURACY & ALLOCATE MARKS:
-   - Grade the student's answers relative to the provided \`answerKey\` or \`rubric\`.
-   - If the \`answerKey\` is generic (e.g., "read the question and give marks"), evaluate the correctness of the student's answers based on objective academic facts and standard knowledge for the assignment's subject matter.
-   - Divide the Maximum Marks (${maxMarks}) equally among the identified questions. If there is only one overall question, grade the entire response out of ${maxMarks}.
+   - Calculate the marks per question by dividing the Maximum Marks (${maxMarks}) by the number of official questions identified in the question paper/assignment text (\`question\`), NOT by the number of answers in the student's answer sheet. (For example, if the question paper has 10 questions but the student has written 20 answers, split the marks among the 10 official questions, grading only those 10 questions).
+   - Grade each official question relative to the provided \`answerKey\` or \`rubric\`. If the \`answerKey\` is generic (e.g., "read the question and give marks"), evaluate the correctness of the student's answers based on objective academic facts and standard knowledge for the assignment's subject matter.
+   - If an official question from the question paper is unanswered in the student's submission, you MUST award 0 marks for that specific question.
 3. CALCULATE SCORE:
-   - Sum the marks obtained for each individual question to calculate the final score.
-   - If the student's answer is correct and matches the subject matter, award the appropriate marks. Do not default to 0.
+   - Sum the marks obtained for each individual official question to calculate the final score.
+   - If the student's answer is correct and matches the subject matter, award the appropriate marks.
 4. BREAKDOWN IN FEEDBACK:
    - You MUST list the individual question-by-question marks breakdown in the \`feedback\` JSON property (e.g., 'Question 1: 10/10, Question 2: 8/10, ... Total: 18/20') followed by explanations.
 

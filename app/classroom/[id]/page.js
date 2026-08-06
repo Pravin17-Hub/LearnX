@@ -135,11 +135,14 @@ export default function ClassroomPage() {
     setActionError(null);
     try {
       let uploadedFilePath = null;
+      let questionSheetText = "";
+
       if (assignFile) {
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         const authHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
 
+        // 1. Upload file
         const uploadFormData = new FormData();
         uploadFormData.append('file', assignFile);
         uploadFormData.append('folder', 'assignments');
@@ -157,14 +160,38 @@ export default function ClassroomPage() {
 
         const { url } = await uploadRes.json();
         uploadedFilePath = url;
+
+        // 2. Perform OCR on the question sheet file
+        try {
+          const ocrFormData = new FormData();
+          ocrFormData.append('file', assignFile);
+          const ocrRes = await fetch('/api/ocr', {
+            method: 'POST',
+            headers: authHeaders,
+            body: ocrFormData,
+          });
+          if (ocrRes.ok) {
+            const { text } = await ocrRes.json();
+            if (text && text.trim() !== '') {
+              questionSheetText = text;
+            }
+          }
+        } catch (ocrErr) {
+          console.error("Failed to run OCR on question sheet:", ocrErr.message);
+        }
       }
+
+      // 3. Save assignment in database
+      const descriptionWithQP = questionSheetText 
+        ? `${assignDesc}\n\n[Question Paper Content]:\n${questionSheetText}`
+        : assignDesc;
 
       const { data: newAssign, error } = await supabase
         .from('assignments')
         .insert({
           classroom_id: classroomId,
           title: assignTitle,
-          description: assignDesc,
+          description: descriptionWithQP,
           answer_key: assignAnswerKey,
           rubric: assignRubric,
           max_marks: Number(assignMaxMarks),
