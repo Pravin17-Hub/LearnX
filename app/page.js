@@ -168,7 +168,7 @@ export default function HomePage() {
         </div>
 
         {/* Feed & Sidebar Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '2rem', flexWrap: 'wrap' }}>
+        <div className="feed-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '2rem' }}>
           
           {/* Main Feed Column */}
           <div>

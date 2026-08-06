@@ -328,13 +328,13 @@ export default function CommunityRoomPage() {
         </div>
       </div>
 
-      <div className="container" style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 280px', gap: '2rem', height: 'calc(100vh - 160px)', minHeight: '500px', paddingBottom: '2rem', paddingTop: '1.5rem' }}>
+      <div className="container community-layout-grid" style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 280px', gap: '2rem', height: 'calc(100vh - 160px)', minHeight: '500px', paddingBottom: '2rem', paddingTop: '1.5rem' }}>
         
         {/* Main Room Canvas */}
         <div className="glass card" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: 0 }}>
           
           {/* Tab Selector */}
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', background: '#FFFFFF', padding: '0 1.5rem' }}>
+          <div className="tabs-container" style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', background: '#FFFFFF', padding: '0 1.5rem' }}>
             {['chat', 'library', 'share'].map((tab) => (
               <button
                 key={tab}

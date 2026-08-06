@@ -430,7 +430,7 @@ export default function ClassroomPage() {
         </div>
 
         {/* Classroom Tab Navigation */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '2.0rem', gap: '2rem' }}>
+        <div className="tabs-container" style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '2.0rem', gap: '2rem' }}>
           {['assignments', 'quizzes', 'materials', 'members'].map((tab) => (
             <button
               key={tab}

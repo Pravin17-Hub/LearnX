@@ -121,15 +121,18 @@ export default function PublicProfilePage() {
 
         const formData = new FormData();
         formData.append('file', avatarFile);
+        formData.append('folder', 'profiles');
         const res = await fetch('/api/upload', {
           method: 'POST',
           headers: authHeaders,
           body: formData
         });
-        if (res.ok) {
-          const uploadData = await res.json();
-          uploadedAvatarPath = uploadData.url;
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || 'Failed to upload profile image');
         }
+        const uploadData = await res.json();
+        uploadedAvatarPath = uploadData.url;
       }
 
       const { error } = await supabase
@@ -286,7 +289,7 @@ export default function PublicProfilePage() {
       <div className="container animate-fade-in" style={{ maxWidth: '900px' }}>
         
         {/* Header Profile Cover & Card */}
-        <div className="glass card" style={{ padding: '2.5rem', marginBottom: '2rem', display: 'flex', gap: '2rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="glass card profile-header-card" style={{ padding: '2.5rem', marginBottom: '2rem', display: 'flex', gap: '2rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <img
             src={getAvatarUrl(profileUser)}
             alt="avatar"
@@ -353,7 +356,7 @@ export default function PublicProfilePage() {
         </div>
 
         {/* Info Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
+        <div className="profile-info-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
           
           {/* User Details */}
           <div className="glass card" style={{ height: 'fit-content' }}>
@@ -432,8 +435,8 @@ export default function PublicProfilePage() {
 
       {/* EDIT PROFILE MODAL */}
       {isEditing && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass card" style={{ maxWidth: '500px', width: '100%', padding: '2rem', background: '#FFFFFF' }}>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
+          <div className="glass card modal-content" style={{ maxWidth: '500px', width: '100%', padding: '2rem', background: '#FFFFFF' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>✏️ Edit Profile Info</h3>
             <form onSubmit={handleSaveProfile} style={{ display: 'grid', gap: '1.2rem' }}>
               <div>
@@ -478,8 +481,8 @@ export default function PublicProfilePage() {
 
       {/* SHARE STUDY NOTE MODAL */}
       {isUploading && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass card" style={{ maxWidth: '500px', width: '100%', padding: '2rem', background: '#FFFFFF' }}>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
+          <div className="glass card modal-content" style={{ maxWidth: '500px', width: '100%', padding: '2rem', background: '#FFFFFF' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>📝 Share Note / Material</h3>
             <form onSubmit={handleUploadNote} style={{ display: 'grid', gap: '1.2rem' }}>
               <div>

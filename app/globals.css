@@ -924,4 +924,104 @@ nav.tabs {
     width: 100%;
     order: 3;
   }
+
+  /* --- Mobile-only layout fixes (prevent zooming & overflow) --- */
+  .container {
+    padding: 1.25rem 1rem !important;
+  }
+
+  /* Stacking columns */
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1.25rem !important;
+  }
+
+  .feed-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1.25rem !important;
+  }
+
+  .community-layout-grid {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+    min-height: 0 !important;
+    gap: 1.5rem !important;
+    padding-bottom: 4rem !important;
+  }
+
+  /* Profile page responsive elements */
+  .profile-header-card {
+    padding: 1.5rem 1.25rem !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    gap: 1.25rem !important;
+  }
+  .profile-header-card img {
+    margin: 0 auto !important;
+  }
+  .profile-header-card > div {
+    width: 100% !important;
+  }
+  .profile-header-card .badge,
+  .profile-header-card .btn,
+  .profile-header-card div[style*="display: flex"] {
+    justify-content: center !important;
+  }
+
+  .profile-info-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1.25rem !important;
+  }
+
+  /* Scrollable tabs instead of wrapping/stacking */
+  .tabs-container {
+    display: flex !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    scrollbar-width: none !important; /* Hide scrollbar for Firefox */
+    -ms-overflow-style: none !important;  /* Hide scrollbar for IE/Edge */
+    gap: 1.25rem !important;
+    padding: 0 0.5rem !important;
+  }
+  .tabs-container::-webkit-scrollbar {
+    display: none !important; /* Hide scrollbar for Chrome/Safari */
+  }
+  .tabs-container button {
+    white-space: nowrap !important;
+    padding: 0.75rem 0 !important;
+    margin-right: 0 !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Form and grid fields in modals */
+  .modal-content {
+    padding: 1.5rem 1.25rem !important;
+    width: 95% !important;
+    margin: 0 auto !important;
+  }
+  .modal-content form .row, 
+  .modal-content form div[style*="display: grid"],
+  .modal-content form div[style*="display:grid"] {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+  }
+
+  /* Chat page view fixes */
+  .chat-container-grid {
+    grid-template-columns: 1fr !important;
+    height: calc(100vh - 140px) !important;
+    gap: 0 !important;
+    padding: 0.5rem !important;
+  }
+
+  /* Top actions layout */
+  .top-actions {
+    width: 100% !important;
+    justify-content: space-between !important;
+    margin-top: 1rem !important;
+  }
+  .avatar-nav {
+    margin-left: auto !important;
+  }
 }

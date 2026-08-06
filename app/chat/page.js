@@ -19,6 +19,17 @@ export default function ChatPage() {
   const messagesEndRef = useRef(null);
   const selectedUserRef = useRef(selectedUser);
 
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 760);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Sync ref with state for the realtime handler
   useEffect(() => {
     selectedUserRef.current = selectedUser;
@@ -221,150 +232,162 @@ export default function ChatPage() {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-main)' }}>
       <Navbar />
       
-      <div className="container" style={{ flex: 1, display: 'grid', gridTemplateColumns: '320px 1fr', gap: '2rem', height: 'calc(100vh - 120px)', minHeight: '500px', paddingBottom: '2rem' }}>
+      <div className="container chat-container-grid" style={{ flex: 1, display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '320px 1fr', gap: isMobile ? '0' : '2rem', height: 'calc(100vh - 120px)', minHeight: '500px', paddingBottom: '2rem' }}>
         
         {/* Left Sidebar: Peers List */}
-        <div className="glass card" style={{ display: 'flex', flexDirection: 'column', padding: '1.25rem', overflowY: 'auto' }}>
-          <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--text-primary)' }}>💬 Peers</h3>
-          <div style={{ display: 'grid', gap: '0.8rem' }}>
-            {usersList.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No other registered users found.</p>
-            ) : (
-              usersList.map((peer) => (
-                <div
-                  key={peer.id}
-                  onClick={() => setSelectedUser(peer)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.75rem',
-                    borderRadius: 'var(--radius)',
-                    cursor: 'pointer',
-                    background: selectedUser?.id === peer.id 
-                      ? 'rgba(99, 102, 241, 0.12)' 
-                      : peer.unreadCount > 0 
-                        ? 'rgba(239, 68, 68, 0.08)' 
-                        : 'rgba(255, 255, 255, 0.6)',
-                    border: selectedUser?.id === peer.id 
-                      ? '1px solid var(--color-primary)' 
-                      : peer.unreadCount > 0 
-                        ? '1px solid #ef4444' 
-                        : '1px solid var(--border-color)',
-                    transition: 'var(--transition)',
-                  }}
-                >
-                  <img
-                    src={getAvatarUrl(peer)}
-                    alt="avatar"
-                    style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }}
-                  />
-                  <div style={{ flex: 1, overflow: 'hidden' }}>
-                    <h4 style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                      {peer.name}
-                    </h4>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>@{peer.username}</span>
-                  </div>
-                  {peer.unreadCount > 0 && (
-                    <span 
-                      style={{ 
-                        background: '#ef4444', 
-                        color: 'white', 
-                        fontSize: '0.65rem', 
-                        fontWeight: 700, 
-                        padding: '0.15rem 0.4rem', 
-                        borderRadius: '10px',
-                        marginLeft: 'auto'
-                      }}
-                    >
-                      {peer.unreadCount}
-                    </span>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Right Panel: Conversation history */}
-        <div className="glass card" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: 0 }}>
-          {!selectedUser ? (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem' }}>
-              <span style={{ fontSize: '3rem', marginBottom: '1rem' }}>💬</span>
-              <h4 style={{ color: 'var(--text-primary)', fontWeight: 700 }}>Your Inbox</h4>
-              <p style={{ fontSize: '0.9rem', marginTop: '0.25rem' }}>Select a peer from the left sidebar to start messaging in real time.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              
-              {/* Active User Header */}
-              <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <img
-                  src={getAvatarUrl(selectedUser)}
-                  alt="avatar"
-                  style={{ width: '38px', height: '38px', borderRadius: '50%', objectFit: 'cover' }}
-                />
-                <div>
-                  <h4 style={{ fontWeight: 700, color: 'var(--text-primary)' }} onClick={() => router.push(`/profile/${selectedUser.username}`)}>
-                    {selectedUser.name} <span style={{ fontSize: '0.75rem', color: 'var(--color-primary)', cursor: 'pointer' }}>(View Profile &rarr;)</span>
-                  </h4>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>@{selectedUser.username} • {selectedUser.role}</span>
-                </div>
-              </div>
-
-              {/* Chat messages viewport */}
-              <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', background: '#F8FAFC' }}>
-                {messages.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: 'auto', marginBottom: 'auto' }}>
-                    Say hello to start the conversation!
-                  </p>
-                ) : (
-                  messages.map((msg) => {
-                    const isMe = msg.sender_id === user.id;
-                    return (
-                      <div
-                        key={msg.id}
-                        style={{
-                          maxWidth: '70%',
-                          padding: '0.8rem 1.2rem',
-                          borderRadius: 'var(--radius)',
-                          alignSelf: isMe ? 'flex-end' : 'flex-start',
-                          background: isMe ? 'var(--color-primary)' : '#FFFFFF',
-                          color: isMe ? '#FFFFFF' : 'var(--text-primary)',
-                          border: isMe ? 'none' : '1px solid var(--border-color)',
-                          boxShadow: 'var(--shadow-sm)',
+        {(!isMobile || !selectedUser) && (
+          <div className="glass card" style={{ display: 'flex', flexDirection: 'column', padding: '1.25rem', overflowY: 'auto', height: '100%' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--text-primary)' }}>💬 Peers</h3>
+            <div style={{ display: 'grid', gap: '0.8rem' }}>
+              {usersList.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No other registered users found.</p>
+              ) : (
+                usersList.map((peer) => (
+                  <div
+                    key={peer.id}
+                    onClick={() => setSelectedUser(peer)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.75rem',
+                      borderRadius: 'var(--radius)',
+                      cursor: 'pointer',
+                      background: selectedUser?.id === peer.id 
+                        ? 'rgba(99, 102, 241, 0.12)' 
+                        : peer.unreadCount > 0 
+                          ? 'rgba(239, 68, 68, 0.08)' 
+                          : 'rgba(255, 255, 255, 0.6)',
+                      border: selectedUser?.id === peer.id 
+                        ? '1px solid var(--color-primary)' 
+                        : peer.unreadCount > 0 
+                          ? '1px solid #ef4444' 
+                          : '1px solid var(--border-color)',
+                      transition: 'var(--transition)',
+                    }}
+                  >
+                    <img
+                      src={getAvatarUrl(peer)}
+                      alt="avatar"
+                      style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }}
+                    />
+                    <div style={{ flex: 1, overflow: 'hidden' }}>
+                      <h4 style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        {peer.name}
+                      </h4>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>@{peer.username}</span>
+                    </div>
+                    {peer.unreadCount > 0 && (
+                      <span 
+                        style={{ 
+                          background: '#ef4444', 
+                          color: 'white', 
+                          fontSize: '0.65rem', 
+                          fontWeight: 700, 
+                          padding: '0.15rem 0.4rem', 
+                          borderRadius: '10px',
+                          marginLeft: 'auto'
                         }}
                       >
-                        <p style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>{msg.content}</p>
-                        <span style={{ display: 'block', fontSize: '0.65rem', color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)', textAlign: 'right', marginTop: '0.3rem' }}>
-                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                    );
-                  })
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Input box */}
-              <form onSubmit={handleSendMessage} style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '1rem', background: '#FFFFFF' }}>
-                <input
-                  type="text"
-                  required
-                  placeholder="Type a message..."
-                  className="input"
-                  style={{ flex: 1, background: '#F1F5F9' }}
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                />
-                <button type="submit" className="btn btn-primary" style={{ padding: '0.6rem 1.5rem' }}>
-                  Send
-                </button>
-              </form>
-
+                        {peer.unreadCount}
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* Right Panel: Conversation history */}
+        {(!isMobile || selectedUser) && (
+          <div className="glass card" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: 0 }}>
+            {!selectedUser ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem' }}>
+                <span style={{ fontSize: '3rem', marginBottom: '1rem' }}>💬</span>
+                <h4 style={{ color: 'var(--text-primary)', fontWeight: 700 }}>Your Inbox</h4>
+                <p style={{ fontSize: '0.9rem', marginTop: '0.25rem' }}>Select a peer from the left sidebar to start messaging in real time.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                
+                {/* Active User Header */}
+                <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  {isMobile && (
+                    <button 
+                      onClick={() => setSelectedUser(null)} 
+                      style={{ background: 'none', border: 'none', fontSize: '1rem', cursor: 'pointer', paddingRight: '0.5rem', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: 'bold' }}
+                    >
+                      &larr; Back
+                    </button>
+                  )}
+                  <img
+                    src={getAvatarUrl(selectedUser)}
+                    alt="avatar"
+                    style={{ width: '38px', height: '38px', borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                  <div>
+                    <h4 style={{ fontWeight: 700, color: 'var(--text-primary)' }} onClick={() => router.push(`/profile/${selectedUser.username}`)}>
+                      {selectedUser.name} <span style={{ fontSize: '0.75rem', color: 'var(--color-primary)', cursor: 'pointer' }}>(View Profile &rarr;)</span>
+                    </h4>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>@{selectedUser.username} • {selectedUser.role}</span>
+                  </div>
+                </div>
+
+                {/* Chat messages viewport */}
+                <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', background: '#F8FAFC' }}>
+                  {messages.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: 'auto', marginBottom: 'auto' }}>
+                      Say hello to start the conversation!
+                    </p>
+                  ) : (
+                    messages.map((msg) => {
+                      const isMe = msg.sender_id === user.id;
+                      return (
+                        <div
+                          key={msg.id}
+                          style={{
+                            maxWidth: '70%',
+                            padding: '0.8rem 1.2rem',
+                            borderRadius: 'var(--radius)',
+                            alignSelf: isMe ? 'flex-end' : 'flex-start',
+                            background: isMe ? 'var(--color-primary)' : '#FFFFFF',
+                            color: isMe ? '#FFFFFF' : 'var(--text-primary)',
+                            border: isMe ? 'none' : '1px solid var(--border-color)',
+                            boxShadow: 'var(--shadow-sm)',
+                          }}
+                        >
+                          <p style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>{msg.content}</p>
+                          <span style={{ display: 'block', fontSize: '0.65rem', color: isMe ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)', textAlign: 'right', marginTop: '0.3rem' }}>
+                            {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Input box */}
+                <form onSubmit={handleSendMessage} style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '1rem', background: '#FFFFFF' }}>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Type a message..."
+                    className="input"
+                    style={{ flex: 1, background: '#F1F5F9' }}
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                  />
+                  <button type="submit" className="btn btn-primary" style={{ padding: '0.6rem 1.5rem' }}>
+                    Send
+                  </button>
+                </form>
+
+              </div>
+            )}
+          </div>
+        )}
 
       </div>
     </div>
