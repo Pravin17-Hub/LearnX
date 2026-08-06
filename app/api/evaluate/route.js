@@ -31,13 +31,19 @@ export async function POST(request) {
 
     const systemPrompt = `You are an expert academic evaluator. You are given the Assignment details, an Answer Key, a Grading Rubric, and the Maximum Marks.
 Evaluate the student's response strictly, methodically, and mathematically by following these rules:
-1. IDENTIFY OFFICIAL QUESTIONS: Determine the official questions asked from the assignment text (\`question\`) or the \`answerKey\`. Do NOT look at the general assignment title. If the assignment text or answer key has specific questions (e.g., 2 questions), those are the ONLY official questions to grade.
-2. ALIGN STUDENT ANSWERS: Match the student's submission text (\`studentAnswer\`) directly to these official questions.
-3. IGNORE EXTRA/IRRELEVANT ANSWERS: If the student has provided more answers than the official questions (e.g., they wrote 20 answers but only 2 questions were officially asked), ignore all the extra/unrelated answers. Do NOT award any marks or full marks based on the quantity of extra answers.
-4. GRADE STRICTLY: For each official question, grade the corresponding student answer relative to the answer key or rubric. If an official question is unanswered, or answered incorrectly (even if they wrote 20 other unrelated answers), you MUST award 0 marks for that question.
-5. ALLOCATE MARKS: Divide the Maximum Marks (${maxMarks}) equally among the official questions, unless specified otherwise in the rubric.
-6. STRICT SUM: Calculate the final score as the sum of the marks obtained for each individual official question.
-7. BREAKDOWN IN FEEDBACK: You MUST list the individual question-by-question marks breakdown in the \`feedback\` JSON property (e.g., 'Question 1: 10/10, Question 2: 8/10, ... Total: 18/20') followed by explanations.
+1. IDENTIFY OFFICIAL QUESTIONS:
+   - Identify specific questions from the assignment text (\`question\`) or the \`answerKey\`.
+   - If the assignment text (\`question\`) or \`answerKey\` are generic, empty, or contain "Nothing", look at the student's submission (\`studentAnswer\`) to see if it lists numbered questions and answers (e.g., "Q1:", "1. What is..."). If so, treat those as the official questions to grade.
+   - If no specific sub-questions can be identified anywhere, treat the entire assignment as a single overall question to be graded.
+2. EVALUATE ACCURACY & ALLOCATE MARKS:
+   - Grade the student's answers relative to the provided \`answerKey\` or \`rubric\`.
+   - If the \`answerKey\` is generic (e.g., "read the question and give marks"), evaluate the correctness of the student's answers based on objective academic facts and standard knowledge for the assignment's subject matter.
+   - Divide the Maximum Marks (${maxMarks}) equally among the identified questions. If there is only one overall question, grade the entire response out of ${maxMarks}.
+3. CALCULATE SCORE:
+   - Sum the marks obtained for each individual question to calculate the final score.
+   - If the student's answer is correct and matches the subject matter, award the appropriate marks. Do not default to 0.
+4. BREAKDOWN IN FEEDBACK:
+   - You MUST list the individual question-by-question marks breakdown in the \`feedback\` JSON property (e.g., 'Question 1: 10/10, Question 2: 8/10, ... Total: 18/20') followed by explanations.
 
 Respond ONLY with a JSON object in the following format:
 {
