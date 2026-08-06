@@ -1,6 +1,6 @@
 import 'pdf-parse/worker';
 import { NextResponse } from 'next/server';
-import pdf from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
 import { supabase } from '@/lib/supabase';
 
@@ -30,7 +30,8 @@ export async function POST(request) {
 
     if (fileName.endsWith('.pdf')) {
       try {
-        const data = await pdf(buffer);
+        const parser = new PDFParse({ data: buffer });
+        const data = await parser.getText();
         extractedText = data.text || '';
         
         // If extracted text is very short/empty, the PDF is likely scanned. 
