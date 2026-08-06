@@ -122,8 +122,13 @@ Evaluate the student's response strictly, methodically, and mathematically by fo
 2. EVALUATE ACCURACY & ALLOCATE MARKS:
    - Determine the exact total number of official questions (N).
    - The maximum marks allocated to EACH individual question MUST be exactly equal to: Maximum Marks (${maxMarks}) / N. Do NOT allocate custom weights, and do NOT group questions together. For example, if Maximum Marks is 100 and there are 20 questions, each question is worth exactly 5 marks.
-   - Grade each of the N questions individually and strictly out of its calculated share of marks (e.g. 5 marks).
-   - If a question is unanswered or missing in the student's submission, you MUST award exactly 0 marks for that specific question.
+   - Grade each of the N questions individually and strictly out of its calculated share of marks (e.g. 5 marks) based on correctness, depth, length, and quality:
+     - **EXPECTED CONTENT LENGTH & DEPTH BY MARKS**:
+       - For questions worth **2 marks or less**: A short, direct answer is acceptable (e.g., 10-30 words).
+       - For questions worth **3 to 5 marks**: The answer MUST be detailed, explanation-rich, and have substantial content (typically 50-100+ words). A brief or superficial answer (e.g., only 15 words) is a major deficiency in depth; deduct significant marks (e.g., award at most 2 out of 5 marks) for lack of explanation, examples, or elaboration, even if the statement itself is factually correct.
+       - For questions worth **more than 5 marks**: The answer MUST be comprehensive, structured, include diagrams/code/examples where appropriate, and demonstrate extensive depth (typically 100-200+ words). Deduct heavily if the answer is short or brief.
+     - **QUALITY & CORRECTNESS**: Evaluate academic accuracy and quality against the provided \`answerKey\` and \`rubric\`. Deduct marks for factual errors, superficial explanations, or missing core concepts.
+     - If a question is unanswered or missing in the student's submission, you MUST award exactly 0 marks for that specific question.
 3. OUTPUT FORMAT:
    - Return a JSON object with a structured \`question_breakdown\` array. The array must contain exactly N items (one for each of the N official questions).
    - Each item in the \`question_breakdown\` array must contain:
