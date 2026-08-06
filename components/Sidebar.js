@@ -60,7 +60,7 @@ export default function Sidebar() {
       .substring(0, 2);
   };
 
-  const classColors = ['#7A533E', '#5D707F', '#C2884E', '#7E637C', '#A63A26'];
+  const classColors = ['#7A533E', '#8C7A6B', '#C2884E', '#8A6F62', '#A63A26'];
 
   if (!user) {
     return (

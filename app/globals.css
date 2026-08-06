@@ -17,8 +17,8 @@
   --forest-dark: #573929; /* Chestnut Accent */
   --marigold: #C2884E;   /* Ochre Accent */
   --clay: #A63A26;       /* Terracotta Accent */
-  --slate: #5D707F;      /* Muted Slate Accent */
-  --plum: #7E637C;       /* Refined Plum Accent */
+  --slate: #8C7A6B;      /* Warm Oatmeal Taupe Accent */
+  --plum: #8A6F62;       /* Warm Chestnut Accent */
   --line: #E2DACD;       /* Oatmeal Border Line */
   --line-soft: #ECE6DC;  /* Soft Oatmeal Border Line */
   --radius: 14px;
@@ -161,15 +161,15 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--color-primary), #4f46e5);
+  background: linear-gradient(135deg, var(--color-primary), var(--forest-dark));
   color: white;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.25);
+  box-shadow: 0 4px 14px rgba(122, 83, 62, 0.25);
   border: none;
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 6px 20px rgba(122, 83, 62, 0.4);
 }
 
 .btn-secondary {
@@ -223,7 +223,7 @@ body {
 
 .input:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 3px rgba(122, 83, 62, 0.15);
 }
 
 /* Dashboard Layout Grid */
@@ -244,7 +244,7 @@ body {
 
 .card:hover {
   transform: translateY(-2px);
-  border-color: rgba(99, 102, 241, 0.25);
+  border-color: rgba(122, 83, 62, 0.2);
   box-shadow: var(--shadow-md);
   background: var(--bg-card-hover);
 }
@@ -266,9 +266,9 @@ body {
 }
 
 .alert-success {
-  background: rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.2);
-  color: #065f46;
+  background: rgba(122, 83, 62, 0.08);
+  border-color: rgba(122, 83, 62, 0.2);
+  color: #573929;
 }
 
 .alert-error {
@@ -322,9 +322,9 @@ body {
   text-transform: uppercase;
 }
 
-.badge-student { background: rgba(6, 182, 212, 0.1); color: #0891b2; }
-.badge-faculty { background: rgba(99, 102, 241, 0.1); color: #4f46e5; }
-.badge-admin { background: rgba(236, 72, 153, 0.1); color: #db2777; }
+.badge-student { background: rgba(140, 122, 107, 0.1); color: #8C7A6B; }
+.badge-faculty { background: rgba(194, 136, 78, 0.1); color: #C2884E; }
+.badge-admin { background: rgba(166, 58, 38, 0.1); color: #A63A26; }
 
 /* ---------- Layout & Navigation ---------- */
 .shell {

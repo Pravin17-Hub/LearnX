@@ -211,7 +211,7 @@ export default function Dashboard() {
     day: 'numeric'
   });
 
-  const classColors = ['#7A533E', '#5D707F', '#C2884E', '#7E637C', '#A63A26'];
+  const classColors = ['#7A533E', '#8C7A6B', '#C2884E', '#8A6F62', '#A63A26'];
   const avatarUrl = user?.avatar_path && user.avatar_path !== '/assets/images/default-avatar.png'
     ? user.avatar_path
     : `https://api.dicebear.com/7.x/adventurer/svg?seed=${user?.username || 'user'}`;
