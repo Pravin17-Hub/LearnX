@@ -511,6 +511,15 @@ export default function AdvancedQuizPage() {
           .limit(1)
           .maybeSingle();
         setPastAttempt(past);
+        if (past && !teacherRole) {
+          setCurrentAttempt(past);
+          try {
+            setFeedbackDetails(JSON.parse(past.ai_feedback || '{}'));
+          } catch (e) {
+            setFeedbackDetails({});
+          }
+          setPhase('result');
+        }
       }
 
       // Fetch all attempts if teacher
@@ -731,6 +740,7 @@ export default function AdvancedQuizPage() {
       }
 
       setCurrentAttempt(attempt);
+      setPastAttempt(attempt);
       setFeedbackDetails(feedbackMap);
       setPhase('result');
       
@@ -1086,8 +1096,17 @@ export default function AdvancedQuizPage() {
                   <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--danger)', fontWeight: 600 }}>Auto-submitted due to timer expiry</span>
                 )}
               </div>
-              <button onClick={() => setPhase('view')} className="btn btn-secondary">
-                Back to List
+              <button 
+                onClick={() => {
+                  if (quiz?.classroom_id) {
+                    router.push(`/classroom/${quiz.classroom_id}`);
+                  } else {
+                    router.push('/');
+                  }
+                }} 
+                className="btn btn-secondary"
+              >
+                Back to Classroom
               </button>
             </div>
 

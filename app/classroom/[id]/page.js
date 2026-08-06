@@ -56,6 +56,7 @@ export default function ClassroomPage() {
   const [quizIsPublic, setQuizIsPublic] = useState(false);
   const [quizDesc, setQuizDesc] = useState('');
   const [quizQuestions, setQuizQuestions] = useState([]);
+  const [myAttempts, setMyAttempts] = useState([]);
 
   const [actionError, setActionError] = useState(null);
 
@@ -104,6 +105,15 @@ export default function ClassroomPage() {
         .eq('classroom_id', classroomId)
         .order('created_at', { ascending: false });
       setQuizzes(qzs || []);
+
+      // Fetch student's quiz attempts in classroom
+      if (profile) {
+        const { data: atts } = await supabase
+          .from('quiz_attempts')
+          .select('quiz_id, score, max_score')
+          .eq('student_id', profile.id);
+        setMyAttempts(atts || []);
+      }
 
       // Fetch Materials
       const { data: mats } = await supabase
@@ -574,7 +584,11 @@ export default function ClassroomPage() {
                       
                       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                         <button className="btn btn-primary" style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>
-                          {isTeacher ? 'View attempts' : 'Begin Test'}
+                          {isTeacher 
+                            ? 'View attempts' 
+                            : myAttempts.some(att => att.quiz_id === q.id)
+                              ? 'View Result'
+                              : 'Begin Test'}
                         </button>
                         {isTeacher && (
                           <button
