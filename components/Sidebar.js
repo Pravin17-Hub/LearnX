@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
-export default function Sidebar() {
+export default function Sidebar({ isCollapsed, onToggle }) {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState(null);
@@ -65,9 +65,22 @@ export default function Sidebar() {
   if (!user) {
     return (
       <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">L</div>
-          <div className="brand-name">LearnX</div>
+        <div className="brand" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="brand-mark">L</div>
+            <div className="brand-name">LearnX</div>
+          </div>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onToggle(); }}
+            className="sidebar-collapse-btn"
+            title="Hide Sidebar"
+            aria-label="Hide Sidebar"
+            style={{ background: 'none', border: 'none', color: '#8FA089', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', transition: 'color 0.15s ease' }}
+            onMouseEnter={(e) => e.currentTarget.style.color = '#EFF6F0'}
+            onMouseLeave={(e) => e.currentTarget.style.color = '#8FA089'}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="12" x2="6" y2="12"/><polyline points="12 18 6 12 12 6"/></svg>
+          </button>
         </div>
         <nav className="tabs">
           <div className="tab-group-label">Overview</div>
@@ -82,9 +95,22 @@ export default function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <div className="brand" style={{ cursor: 'pointer' }} onClick={() => router.push('/')}>
-        <div className="brand-mark">L</div>
-        <div className="brand-name">LearnX</div>
+      <div className="brand" style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }} onClick={() => router.push('/')}>
+          <div className="brand-mark">L</div>
+          <div className="brand-name">LearnX</div>
+        </div>
+        <button 
+          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          className="sidebar-collapse-btn"
+          title="Hide Sidebar"
+          aria-label="Hide Sidebar"
+          style={{ background: 'none', border: 'none', color: '#8FA089', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', transition: 'color 0.15s ease' }}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#EFF6F0'}
+          onMouseLeave={(e) => e.currentTarget.style.color = '#8FA089'}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="12" x2="6" y2="12"/><polyline points="12 18 6 12 12 6"/></svg>
+        </button>
       </div>
 
       <nav className="tabs">
