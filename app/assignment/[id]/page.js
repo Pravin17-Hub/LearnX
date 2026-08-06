@@ -145,6 +145,7 @@ export default function AssignmentDetailsPage() {
         },
         body: JSON.stringify({
           question: `${assignment.title}\n${assignment.description}`,
+          questionPaperUrl: assignment.file_path,
           answerKey: assignment.answer_key || 'No ideal answer key specified.',
           rubric: assignment.rubric || 'Grade based on accuracy and logic.',
           maxMarks: assignment.max_marks,
