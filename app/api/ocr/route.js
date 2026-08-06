@@ -55,19 +55,24 @@ export async function POST(request) {
       fileName.endsWith('.png')
     ) {
       try {
-        const apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
+        const apiKey = process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
         if (!apiKey) {
           return NextResponse.json(
-            { error: 'API key is missing. Please set GROQ_API_KEY or OPENAI_API_KEY in environment variables.' },
+            { error: 'API key is missing. Please configure GEMINI_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY in environment variables.' },
             { status: 500 }
           );
         }
 
-        const isGroq = apiKey.startsWith('gsk_');
-        const apiUrl = isGroq
-          ? 'https://api.groq.com/openai/v1/chat/completions'
-          : 'https://api.openai.com/v1/chat/completions';
-        const model = isGroq ? 'qwen/qwen3.6-27b' : 'gpt-4o-mini';
+        let apiUrl = 'https://api.openai.com/v1/chat/completions';
+        let model = 'gpt-4o-mini';
+
+        if (process.env.GEMINI_API_KEY && apiKey === process.env.GEMINI_API_KEY) {
+          apiUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+          model = 'gemini-2.5-flash';
+        } else if (process.env.GROQ_API_KEY && apiKey === process.env.GROQ_API_KEY) {
+          apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
+          model = 'qwen/qwen3.6-27b';
+        }
 
         // base64 encode the image
         const base64Image = buffer.toString('base64');
