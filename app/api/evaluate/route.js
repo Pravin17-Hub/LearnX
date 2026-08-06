@@ -171,7 +171,7 @@ Student Answer: ${studentAnswer}`;
       seed: 42,
     };
 
-    const response = await fetch(apiUrl, {
+    let response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -179,6 +179,35 @@ Student Answer: ${studentAnswer}`;
       },
       body: JSON.stringify(requestBody),
     });
+
+    // Auto-fallback if the API request fails (e.g. rate limit 429)
+    if (!response.ok) {
+      const isGemini = process.env.GEMINI_API_KEY && apiKey === process.env.GEMINI_API_KEY;
+      const fallbackApiKey = isGemini ? (process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY) : null;
+      
+      if (fallbackApiKey) {
+        console.warn(`Primary AI evaluation failed with status ${response.status}. Automatically falling back to backup provider...`);
+        const fallbackIsGroq = fallbackApiKey.startsWith('gsk_');
+        const fallbackUrl = fallbackIsGroq
+          ? 'https://api.groq.com/openai/v1/chat/completions'
+          : 'https://api.openai.com/v1/chat/completions';
+        const fallbackModel = fallbackIsGroq ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini';
+
+        const fallbackRequestBody = {
+          ...requestBody,
+          model: fallbackModel
+        };
+
+        response = await fetch(fallbackUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${fallbackApiKey}`,
+          },
+          body: JSON.stringify(fallbackRequestBody),
+        });
+      }
+    }
 
     if (!response.ok) {
       const errorText = await response.text();

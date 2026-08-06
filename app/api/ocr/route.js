@@ -79,7 +79,7 @@ export async function POST(request) {
         const mimeType = file.type || 'image/jpeg';
         const dataUrl = `data:${mimeType};base64,${base64Image}`;
 
-        const response = await fetch(apiUrl, {
+        let response = await fetch(apiUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -107,6 +107,50 @@ export async function POST(request) {
             temperature: 0.0
           })
         });
+
+        // Auto-fallback if the API request fails (e.g. rate limit 429)
+        if (!response.ok) {
+          const isGemini = process.env.GEMINI_API_KEY && apiKey === process.env.GEMINI_API_KEY;
+          const fallbackApiKey = isGemini ? (process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY) : null;
+          
+          if (fallbackApiKey) {
+            console.warn(`Primary AI OCR failed with status ${response.status}. Automatically falling back to backup provider...`);
+            const fallbackIsGroq = fallbackApiKey.startsWith('gsk_');
+            const fallbackUrl = fallbackIsGroq
+              ? 'https://api.groq.com/openai/v1/chat/completions'
+              : 'https://api.openai.com/v1/chat/completions';
+            const fallbackModel = fallbackIsGroq ? 'qwen/qwen3.6-27b' : 'gpt-4o-mini';
+
+            response = await fetch(fallbackUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${fallbackApiKey}`
+              },
+              body: JSON.stringify({
+                model: fallbackModel,
+                messages: [
+                  {
+                    role: 'user',
+                    content: [
+                      {
+                        type: 'text',
+                        text: 'Transcribe the text in this image. Do not add any conversational remarks, explanations or markdown headers. Return ONLY the raw transcribed text. If it is a handwritten test or exam sheet, transcribe the handwriting as accurately as possible.'
+                      },
+                      {
+                        type: 'image_url',
+                        image_url: {
+                          url: dataUrl
+                        }
+                      }
+                    ]
+                  }
+                ],
+                temperature: 0.0
+              })
+            });
+          }
+        }
 
         if (!response.ok) {
           const errText = await response.text();
