@@ -6,28 +6,28 @@
   --font-sans: 'IBM Plex Sans', sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
 
-  /* Custom Color Tokens from Mockup */
-  --ink: #1B2430;
-  --ink-soft: #4B5563;
-  --paper: #F3F4EF;
-  --card: #FFFFFF;
-  --sidebar: #161D17;
-  --sidebar-text: #C9D2C6;
-  --forest: #2F6F4E;
-  --forest-dark: #234F38;
-  --marigold: #E2963A;
-  --clay: #C4573A;
-  --slate: #4C6E91;
-  --plum: #6B4C7A;
-  --line: #DCE0D6;
-  --line-soft: #EAEDE5;
+  /* Custom Color Tokens - Warm Beige & Dark Brown */
+  --ink: #2E221A;        /* Espresso Dark Brown */
+  --ink-soft: #635349;   /* Warm Taupe secondary */
+  --paper: #F5F2EB;      /* Warm Oatmeal Beige background */
+  --card: #FCFAF5;       /* Warm Ivory Card background */
+  --sidebar: #211812;    /* Rich Espresso Coffee Sidebar */
+  --sidebar-text: #D2C8BF; /* Warm Cream Sidebar Text */
+  --forest: #7A533E;     /* Terracotta/Saddle Accent */
+  --forest-dark: #573929; /* Chestnut Accent */
+  --marigold: #C2884E;   /* Ochre Accent */
+  --clay: #A63A26;       /* Terracotta Accent */
+  --slate: #5D707F;      /* Muted Slate Accent */
+  --plum: #7E637C;       /* Refined Plum Accent */
+  --line: #E2DACD;       /* Oatmeal Border Line */
+  --line-soft: #ECE6DC;  /* Soft Oatmeal Border Line */
   --radius: 14px;
-  --shadow-card: 0 1px 2px rgba(27,36,48,0.04), 0 6px 16px -8px rgba(27,36,48,0.10);
-  --shadow-pop: 0 12px 32px -12px rgba(27,36,48,0.28);
+  --shadow-card: 0 1px 2px rgba(46,34,26,0.04), 0 6px 16px -8px rgba(46,34,26,0.08);
+  --shadow-pop: 0 12px 32px -12px rgba(46,34,26,0.22);
 
   /* Next.js theme alignment (mappings to maintain compatibility) */
   --bg-main: var(--paper);
-  --bg-card: rgba(255, 255, 255, 0.95);
+  --bg-card: rgba(252, 250, 245, 0.95);
   --bg-card-hover: rgba(255, 255, 255, 1.0);
   --border-color: var(--line);
   
@@ -37,7 +37,7 @@
   
   --text-primary: var(--ink);
   --text-secondary: var(--ink-soft);
-  --text-muted: #748071;
+  --text-muted: #8B7E74;  /* Refined warm gray */
   
   --success: var(--forest);
   --warning: var(--marigold);
@@ -45,7 +45,7 @@
   
   --shadow-sm: var(--shadow-card);
   --shadow-md: var(--shadow-pop);
-  --shadow-lg: 0 20px 45px rgba(27,36,48,0.15);
+  --shadow-lg: 0 20px 45px rgba(46,34,26,0.12);
   
   --transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -63,7 +63,7 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   overflow-x: hidden;
-  background-image: radial-gradient(at top right, rgba(47, 111, 78, 0.04), transparent 50%), radial-gradient(at bottom left, rgba(76, 110, 145, 0.04), transparent 50%);
+  background-image: radial-gradient(at top right, rgba(122, 83, 62, 0.03), transparent 50%), radial-gradient(at bottom left, rgba(93, 112, 127, 0.03), transparent 50%);
 }
 
 /* Scrollbar styling */
