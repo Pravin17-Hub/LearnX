@@ -1043,51 +1043,53 @@ nav.tabs {
   }
 }
 
-/* ---------- Sidebar Collapsing & Fullscreen Mode (Desktop) ---------- */
-.shell {
-  display: grid;
-  grid-template-columns: 248px 1fr;
-  min-height: 100vh;
-  transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
+@media (min-width: 761px) {
+  /* ---------- Sidebar Collapsing & Fullscreen Mode (Desktop) ---------- */
+  .shell {
+    display: grid;
+    grid-template-columns: 248px 1fr;
+    min-height: 100vh;
+    transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
 
-.shell.shell-collapsed {
-  grid-template-columns: 0px 1fr;
-}
+  .shell.shell-collapsed {
+    grid-template-columns: 0px 1fr;
+  }
 
-.sidebar {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  width: 248px;
-}
+  .sidebar {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 248px;
+  }
 
-.shell.shell-collapsed .sidebar {
-  transform: translateX(-248px);
-  width: 0;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  overflow: hidden;
-}
+  .shell.shell-collapsed .sidebar {
+    transform: translateX(-248px);
+    width: 0;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    overflow: hidden;
+  }
 
-.sidebar-floating-toggle {
-  position: fixed;
-  left: 20px;
-  top: 20px;
-  z-index: 1000;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: var(--sidebar);
-  color: #F4F6F1;
-  border: 1px solid var(--line);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition: var(--transition);
-}
+  .sidebar-floating-toggle {
+    position: fixed;
+    left: 20px;
+    top: 20px;
+    z-index: 1000;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--sidebar);
+    color: #F4F6F1;
+    border: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+  }
 
-.sidebar-floating-toggle:hover {
-  background: var(--forest);
-  transform: scale(1.05);
+  .sidebar-floating-toggle:hover {
+    background: var(--forest);
+    transform: scale(1.05);
+  }
 }
