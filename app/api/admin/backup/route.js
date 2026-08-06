@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { supabase } from '@/lib/supabase';
 import { performBackup } from '@/lib/autobackup';
 
-const BACKUP_DIR = path.join(process.cwd(), 'backups');
+const BACKUP_DIR = process.env.NODE_ENV === 'production'
+  ? path.join(os.tmpdir(), 'backups')
+  : path.join(process.cwd(), 'backups');
 
 async function verifyAdmin(request) {
   const authHeader = request.headers.get('Authorization');

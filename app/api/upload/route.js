@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
 
 export async function POST(request) {
   try {
@@ -38,22 +36,42 @@ export async function POST(request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Create the upload directory path under the public folder
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads', folder);
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
+    const bucketName = 'uploads';
+
+    // Best-effort check & create bucket using service role client
+    try {
+      const { data: buckets } = await supabaseAdmin.storage.listBuckets();
+      const bucketExists = buckets?.some(b => b.name === bucketName);
+      if (!bucketExists) {
+        await supabaseAdmin.storage.createBucket(bucketName, {
+          public: true
+        });
+      }
+    } catch (bucketErr) {
+      console.error('Failed to list/create Supabase storage bucket:', bucketErr.message);
     }
 
     const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = path.join(uploadsDir, fileName);
+    const storagePath = `${folder}/${fileName}`;
 
-    // Write file locally
-    fs.writeFileSync(filePath, buffer);
+    // Upload buffer to Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from(bucketName)
+      .upload(storagePath, buffer, {
+        contentType: file.type || 'application/octet-stream',
+        upsert: true
+      });
 
-    // Publicly accessible URL path served by Next.js
-    const fileUrl = `/uploads/${folder}/${fileName}`;
+    if (uploadError) {
+      return NextResponse.json({ error: `Upload to Supabase Storage failed: ${uploadError.message}` }, { status: 500 });
+    }
 
-    return NextResponse.json({ url: fileUrl });
+    // Publicly accessible URL path served by Supabase
+    const { data: { publicUrl } } = supabaseAdmin.storage
+      .from(bucketName)
+      .getPublicUrl(storagePath);
+
+    return NextResponse.json({ url: publicUrl });
   } catch (error) {
     return NextResponse.json({ error: `Upload failed: ${error.message}` }, { status: 500 });
   }
