@@ -112,20 +112,22 @@ Evaluate the student's response strictly, methodically, and mathematically by fo
    - If both \`question\` and \`answerKey\` are generic, empty, or contain "Nothing", only then look at the student's submission (\`studentAnswer\`) to identify the questions.
    - If no specific sub-questions can be identified anywhere, treat the entire assignment as a single overall question to be graded.
 2. EVALUATE ACCURACY & ALLOCATE MARKS:
-   - Calculate the marks per question by dividing the Maximum Marks (${maxMarks}) by the number of official questions identified in the question paper/assignment text (\`question\`), NOT by the number of answers in the student's answer sheet. (For example, if the question paper has 10 questions but the student has written 20 answers, split the marks among the 10 official questions, grading only those 10 questions).
-   - Grade each official question relative to the provided \`answerKey\` or \`rubric\`. If the \`answerKey\` is generic (e.g., "read the question and give marks"), evaluate the correctness of the student's answers based on objective academic facts and standard knowledge for the assignment's subject matter.
-   - If an official question from the question paper is unanswered in the student's submission, you MUST award 0 marks for that specific question.
+   - Determine the exact total number of official questions (N).
+   - The maximum marks allocated to EACH individual question MUST be exactly equal to: Maximum Marks (${maxMarks}) / N. Do NOT allocate custom weights, and do NOT group questions together. For example, if Maximum Marks is 100 and there are 20 questions, each question is worth exactly 5 marks.
+   - Grade each of the N questions individually and strictly out of its calculated share of marks (e.g. 5 marks).
+   - If a question is unanswered or missing in the student's submission, you MUST award exactly 0 marks for that specific question.
 3. CALCULATE SCORE:
-   - Sum the marks obtained for each individual official question to calculate the final score.
-   - If the student's answer is correct and matches the subject matter, award the appropriate marks.
+   - The final score MUST be the mathematically correct sum of the marks obtained for all N questions individually.
 4. BREAKDOWN IN FEEDBACK:
-   - You MUST list the individual question-by-question marks breakdown in the \`feedback\` JSON property (e.g., 'Question 1: 10/10, Question 2: 8/10, ... Total: 18/20') followed by explanations.
+   - In the \`feedback\` JSON property, you MUST list the individual marks breakdown for every single question individually by its number (e.g. 'Question 1: 5/5, Question 2: 5/5, Question 3: 0/5, ..., Question 20: 0/5, Total: 10/100').
+   - NEVER group, combine, or consolidate questions in the feedback breakdown (e.g., do NOT write 'Questions 3-20: 0/80').
+   - Double-check your math: ensure that the sum of the maximum marks for all listed questions equals exactly ${maxMarks}, and the sum of the student's marks equals the returned \`score\`.
 
 Respond ONLY with a JSON object in the following format:
 {
-  "score": 85,
+  "score": 10,
   "confidence": 95.0,
-  "feedback": "[Mandatory Question-by-Question Marks Breakdown here] Detailed feedback about the grading, explaining why marks were deducted or awarded.",
+  "feedback": "[Mandatory Individual Question-by-Question Marks Breakdown here] Detailed feedback about the grading, explaining why marks were deducted or awarded.",
   "strengths": "Key positive elements of the student's answer.",
   "weaknesses": "Areas where the answer falls short or is missing.",
 }
