@@ -6,28 +6,28 @@
   --font-sans: 'IBM Plex Sans', sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
 
-  /* Custom Color Tokens - Warm Beige & Dark Brown */
-  --ink: #2E221A;        /* Espresso Dark Brown */
-  --ink-soft: #635349;   /* Warm Taupe secondary */
-  --paper: #F5F2EB;      /* Warm Oatmeal Beige background */
-  --card: #FCFAF5;       /* Warm Ivory Card background */
-  --sidebar: #211812;    /* Rich Espresso Coffee Sidebar */
-  --sidebar-text: #D2C8BF; /* Warm Cream Sidebar Text */
-  --forest: #7A533E;     /* Terracotta/Saddle Accent */
-  --forest-dark: #573929; /* Chestnut Accent */
-  --marigold: #C2884E;   /* Ochre Accent */
-  --clay: #A63A26;       /* Terracotta Accent */
-  --slate: #8C7A6B;      /* Warm Oatmeal Taupe Accent */
-  --plum: #8A6F62;       /* Warm Chestnut Accent */
-  --line: #E2DACD;       /* Oatmeal Border Line */
-  --line-soft: #ECE6DC;  /* Soft Oatmeal Border Line */
+  /* Custom Color Tokens - Navy, Teal & Cream Palette */
+  --ink: #0A1C2A;        /* Dark Navy */
+  --ink-soft: #405C70;   /* Muted Blue/Slate */
+  --paper: #F7F8EE;      /* Cream Off-white background */
+  --card: #FFFFFF;       /* Pure White Card background */
+  --sidebar: #0A1C2A;    /* Dark Navy Sidebar */
+  --sidebar-text: #BFCEC1; /* Sage Green Sidebar Text */
+  --forest: #1A526E;     /* Deep Teal Accent */
+  --forest-dark: #0E3D54; /* Darker Teal Accent */
+  --marigold: #5E8793;   /* Slate Teal Accent */
+  --clay: #1A526E;       /* Deep Teal Accent */
+  --slate: #5E8793;      /* Slate Teal Accent */
+  --plum: #BFCFBF;       /* Sage Green Selector */
+  --line: #DFE3D5;       /* Oatmeal Border Line */
+  --line-soft: #ECEFE5;  /* Soft Oatmeal Border Line */
   --radius: 14px;
-  --shadow-card: 0 1px 2px rgba(46,34,26,0.04), 0 6px 16px -8px rgba(46,34,26,0.08);
-  --shadow-pop: 0 12px 32px -12px rgba(46,34,26,0.22);
+  --shadow-card: 0 1px 3px rgba(10, 28, 42, 0.05), 0 4px 12px -8px rgba(10, 28, 42, 0.1);
+  --shadow-pop: 0 12px 32px -12px rgba(10, 28, 42, 0.2);
 
   /* Next.js theme alignment (mappings to maintain compatibility) */
   --bg-main: var(--paper);
-  --bg-card: rgba(252, 250, 245, 0.95);
+  --bg-card: rgba(255, 255, 255, 0.95);
   --bg-card-hover: rgba(255, 255, 255, 1.0);
   --border-color: var(--line);
   
@@ -37,15 +37,15 @@
   
   --text-primary: var(--ink);
   --text-secondary: var(--ink-soft);
-  --text-muted: #8B7E74;  /* Refined warm gray */
+  --text-muted: #5E8793;  /* Slate Teal */
   
   --success: var(--forest);
   --warning: var(--marigold);
-  --danger: var(--clay);
+  --danger: #A63A26;      /* Terracotta Danger Accent */
   
   --shadow-sm: var(--shadow-card);
   --shadow-md: var(--shadow-pop);
-  --shadow-lg: 0 20px 45px rgba(46,34,26,0.12);
+  --shadow-lg: 0 20px 45px rgba(10, 28, 42, 0.12);
   
   --transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -63,7 +63,7 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   overflow-x: hidden;
-  background-image: radial-gradient(at top right, rgba(122, 83, 62, 0.03), transparent 50%), radial-gradient(at bottom left, rgba(93, 112, 127, 0.03), transparent 50%);
+  background-image: radial-gradient(at top right, rgba(26, 82, 110, 0.03), transparent 50%), radial-gradient(at bottom left, rgba(94, 135, 147, 0.03), transparent 50%);
 }
 
 /* Scrollbar styling */
@@ -161,15 +161,16 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--color-primary), var(--forest-dark));
+  background: var(--color-primary);
   color: white;
-  box-shadow: 0 4px 14px rgba(122, 83, 62, 0.25);
+  box-shadow: 0 3px 8px rgba(10, 28, 42, 0.12);
   border: none;
 }
 
 .btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(122, 83, 62, 0.4);
+  background: var(--forest-dark);
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 12px rgba(10, 28, 42, 0.2);
 }
 
 .btn-secondary {
@@ -180,8 +181,8 @@ body {
 }
 
 .btn-secondary:hover {
-  background: #F8FAFC;
-  border-color: rgba(0, 0, 0, 0.15);
+  background: #F4F6EA;
+  border-color: rgba(10, 28, 42, 0.2);
 }
 
 .btn-danger {
@@ -223,7 +224,7 @@ body {
 
 .input:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(122, 83, 62, 0.15);
+  box-shadow: 0 0 0 3px rgba(26, 82, 110, 0.15);
 }
 
 /* Dashboard Layout Grid */
@@ -244,7 +245,7 @@ body {
 
 .card:hover {
   transform: translateY(-2px);
-  border-color: rgba(122, 83, 62, 0.2);
+  border-color: rgba(26, 82, 110, 0.2);
   box-shadow: var(--shadow-md);
   background: var(--bg-card-hover);
 }
@@ -266,15 +267,15 @@ body {
 }
 
 .alert-success {
-  background: rgba(122, 83, 62, 0.08);
-  border-color: rgba(122, 83, 62, 0.2);
-  color: #573929;
+  background: rgba(26, 82, 110, 0.08);
+  border-color: rgba(26, 82, 110, 0.2);
+  color: #0E3D54;
 }
 
 .alert-error {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.2);
-  color: #991b1b;
+  background: rgba(166, 58, 38, 0.08);
+  border-color: rgba(166, 58, 38, 0.2);
+  color: #A63A26;
 }
 
 /* Modal overlays */
