@@ -116,22 +116,31 @@ Evaluate the student's response strictly, methodically, and mathematically by fo
    - The maximum marks allocated to EACH individual question MUST be exactly equal to: Maximum Marks (${maxMarks}) / N. Do NOT allocate custom weights, and do NOT group questions together. For example, if Maximum Marks is 100 and there are 20 questions, each question is worth exactly 5 marks.
    - Grade each of the N questions individually and strictly out of its calculated share of marks (e.g. 5 marks).
    - If a question is unanswered or missing in the student's submission, you MUST award exactly 0 marks for that specific question.
-3. CALCULATE SCORE:
-   - The final score MUST be the mathematically correct sum of the marks obtained for all N questions individually.
-4. BREAKDOWN IN FEEDBACK:
-   - In the \`feedback\` JSON property, you MUST list the individual marks breakdown for every single question individually by its number (e.g. 'Question 1: 5/5, Question 2: 5/5, Question 3: 0/5, ..., Question 20: 0/5, Total: 10/100').
-   - NEVER group, combine, or consolidate questions in the feedback breakdown (e.g., do NOT write 'Questions 3-20: 0/80').
-   - Double-check your math: ensure that the sum of the maximum marks for all listed questions equals exactly ${maxMarks}, and the sum of the student's marks equals the returned \`score\`.
+3. OUTPUT FORMAT:
+   - Return a JSON object with a structured \`question_breakdown\` array. The array must contain exactly N items (one for each of the N official questions).
+   - Each item in the \`question_breakdown\` array must contain:
+     - "question_number": the integer question number (1, 2, ..., N).
+     - "max_marks": the maximum marks for this question (exactly ${maxMarks} / N).
+     - "score": the student's score for this question (from 0 to max_marks).
+     - "reason": a brief reason for the score (e.g., "Correct answer", "Partially correct", "Unanswered").
 
 Respond ONLY with a JSON object in the following format:
 {
-  "score": 10,
+  "question_breakdown": [
+    {
+      "question_number": 1,
+      "max_marks": 5.0,
+      "score": 5.0,
+      "reason": "Correct definition"
+    },
+    ...
+  ],
   "confidence": 95.0,
-  "feedback": "[Mandatory Individual Question-by-Question Marks Breakdown here] Detailed feedback about the grading, explaining why marks were deducted or awarded.",
+  "feedback": "Detailed overall feedback about the grading...",
   "strengths": "Key positive elements of the student's answer.",
-  "weaknesses": "Areas where the answer falls short or is missing.",
+  "weaknesses": "Areas where the answer falls short or is missing."
 }
-Ensure the score is an integer between 0 and ${maxMarks}. The response must be valid JSON and contain no other text.`;
+The response must be valid JSON and contain no other text.`;
 
     const userContent = `Question: ${finalQuestion}
 
@@ -181,6 +190,32 @@ Student Answer: ${studentAnswer}`;
     }
     
     const parsedEvaluation = JSON.parse(cleanJson);
+    
+    // Programmatically calculate total score and breakdown text in JS to ensure mathematical consistency
+    let finalCalculatedScore = 0;
+    let finalMaxMarksSum = 0;
+    let breakdownParts = [];
+
+    if (Array.isArray(parsedEvaluation.question_breakdown)) {
+      parsedEvaluation.question_breakdown.forEach((q) => {
+        finalCalculatedScore += Number(q.score) || 0;
+        finalMaxMarksSum += Number(q.max_marks) || 0;
+        breakdownParts.push(`Question ${q.question_number}: ${q.score}/${q.max_marks}`);
+      });
+    }
+
+    const calculatedScoreRounded = Math.round(finalCalculatedScore);
+    const calculatedMaxMarksRounded = Math.round(finalMaxMarksSum) || maxMarks;
+
+    // Overwrite fields to ensure mathematical consistency
+    parsedEvaluation.score = calculatedScoreRounded;
+    
+    const breakdownPrefix = breakdownParts.length > 0
+      ? breakdownParts.join(', ') + `, Total: ${calculatedScoreRounded}/${calculatedMaxMarksRounded}`
+      : `Total: ${calculatedScoreRounded}/${calculatedMaxMarksRounded}`;
+
+    parsedEvaluation.feedback = `${breakdownPrefix}. ${parsedEvaluation.feedback || ''}`;
+
     return NextResponse.json(parsedEvaluation);
   } catch (error) {
     return NextResponse.json({ error: `Server error: ${error.message}` }, { status: 500 });
