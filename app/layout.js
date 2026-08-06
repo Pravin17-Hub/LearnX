@@ -1,5 +1,6 @@
 import "./globals.css";
 import { autoBackupIfNeeded } from "@/lib/autobackup";
+import LayoutShell from "@/components/LayoutShell";
 
 export const metadata = {
   title: "LearnX - AI-Powered Learning Platform",
@@ -15,7 +16,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <main>{children}</main>
+        <LayoutShell>{children}</LayoutShell>
       </body>
     </html>
   );

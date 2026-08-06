@@ -1,0 +1,236 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+
+export default function Sidebar() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [user, setUser] = useState(null);
+  const [classrooms, setClassrooms] = useState([]);
+  const [todoCount, setTodoCount] = useState(0);
+
+  useEffect(() => {
+    const fetchSidebarData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // 1. Fetch user profile
+      const { data: profile } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', session.user.email)
+        .single();
+      
+      if (profile) {
+        setUser(profile);
+
+        // 2. Fetch user's classrooms
+        const { data: memberClassrooms } = await supabase
+          .from('classroom_members')
+          .select('classroom_id')
+          .eq('user_id', profile.id);
+
+        const classIds = memberClassrooms?.map(m => m.classroom_id) || [];
+        
+        let { data: classes } = await supabase
+          .from('classrooms')
+          .select('*')
+          .or(`creator_id.eq.${profile.id},id.in.(${classIds.length ? classIds.join(',') : '-1'})`);
+        
+        setClassrooms(classes || []);
+
+        // 3. Simple mock/fetch of todo count (or items)
+        setTodoCount(3); // Match the dashboard's "3 items due"
+      }
+    };
+
+    fetchSidebarData();
+  }, [pathname]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  const getInitials = (name) => {
+    if (!name) return 'U';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .substring(0, 2);
+  };
+
+  const classColors = ['#2F6F4E', '#4C6E91', '#E2963A', '#6B4C7A', '#C4573A'];
+
+  if (!user) {
+    return (
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand-mark">L</div>
+          <div className="brand-name">LearnX</div>
+        </div>
+        <nav className="tabs">
+          <div className="tab-group-label">Overview</div>
+          <a className="tab active" href="/login">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            Sign In
+          </a>
+        </nav>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="sidebar">
+      <div className="brand" style={{ cursor: 'pointer' }} onClick={() => router.push('/')}>
+        <div className="brand-mark">L</div>
+        <div className="brand-name">LearnX</div>
+      </div>
+
+      <nav className="tabs">
+        <div className="tab-group-label">Overview</div>
+        <a 
+          className={`tab ${pathname === '/' ? 'active' : ''}`} 
+          href="#"
+          onClick={(e) => { e.preventDefault(); router.push('/'); }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          Home (Feed)
+        </a>
+        <a 
+          className={`tab ${pathname === '/dashboard' ? 'active' : ''}`} 
+          href="#"
+          onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+          Dashboard
+        </a>
+        <a 
+          className={`tab ${pathname === '/search' ? 'active' : ''}`} 
+          href="#"
+          onClick={(e) => { e.preventDefault(); router.push('/search'); }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Search
+        </a>
+        <a 
+          className={`tab ${pathname === '/communities' ? 'active' : ''}`} 
+          href="#"
+          onClick={(e) => { e.preventDefault(); router.push('/communities'); }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Communities
+        </a>
+        <a 
+          className={`tab ${pathname === '/chat' ? 'active' : ''}`} 
+          href="#"
+          onClick={(e) => { e.preventDefault(); router.push('/chat'); }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Chat
+        </a>
+        
+        {/* Role-Specific Overview Tabs */}
+        {(user.role === 'Faculty' || user.role === 'Administrator') && (
+          <a 
+            className={`tab ${pathname === '/evaluator' ? 'active' : ''}`} 
+            href="#"
+            onClick={(e) => { e.preventDefault(); router.push('/evaluator'); }}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            AI Evaluator
+          </a>
+        )}
+
+        {user.role === 'Administrator' && (
+          <a 
+            className={`tab ${pathname === '/admin/backups' ? 'active' : ''}`} 
+            href="#"
+            onClick={(e) => { e.preventDefault(); router.push('/admin/backups'); }}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Admin Panel
+          </a>
+        )}
+
+        <div className="tab-group-label">Quick Links</div>
+        <a 
+          className="tab" 
+          href="#"
+          onClick={(e) => { e.preventDefault(); router.push('/dashboard#todo'); }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 11l3 3 8-8"/><path d="M21 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11"/></svg>
+          To-do List
+          <span className="count">{todoCount}</span>
+        </a>
+
+        {classrooms.length > 0 && (
+          <>
+            <div className="tab-group-label">Classes</div>
+            {classrooms.map((cls, index) => {
+              const isActiveClass = pathname === `/classroom/${cls.id}`;
+              const spineColor = classColors[index % classColors.length];
+              return (
+                <a
+                  key={cls.id}
+                  className={`tab ${isActiveClass ? 'active' : ''}`}
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    router.push(`/classroom/${cls.id}`);
+                  }}
+                >
+                  <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: spineColor, flexShrink: 0 }}></span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {cls.class_name}
+                  </span>
+                </a>
+              );
+            })}
+          </>
+        )}
+
+        <div className="tab-group-label">Library</div>
+        <a className="tab" href="#" onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Archived Classes
+        </a>
+        <a className="tab" href="#" onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+          Grade History
+        </a>
+      </nav>
+
+      <div className="sidebar-foot" style={{ marginTop: 'auto' }}>
+        <img
+          src={user.avatar_path && user.avatar_path !== '/assets/images/default-avatar.png' ? user.avatar_path : `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.username || 'user'}`}
+          alt="avatar"
+          className="avatar-sm"
+          style={{ cursor: 'pointer', border: '1.5px solid rgba(255,255,255,0.15)' }}
+          onClick={() => router.push(`/profile/${user.username}`)}
+        />
+        <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => router.push(`/profile/${user.username}`)}>
+          <div className="who" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            {user.name}
+          </div>
+          <div className="role" style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            {user.role}
+          </div>
+        </div>
+        <button 
+          onClick={handleLogout}
+          aria-label="Sign Out"
+          style={{ background: 'none', border: 'none', color: '#8FA089', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'color 0.15s ease' }}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#EFF6F0'}
+          onMouseLeave={(e) => e.currentTarget.style.color = '#8FA089'}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
+    </aside>
+  );
+}

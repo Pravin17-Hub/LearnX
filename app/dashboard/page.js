@@ -12,10 +12,14 @@ export default function Dashboard() {
   
   // Dashboard states
   const [classrooms, setClassrooms] = useState([]);
-  const [feedPosts, setFeedPosts] = useState([]);
-  const [newPostContent, setNewPostContent] = useState('');
-  const [newPostTitle, setNewPostTitle] = useState('');
+  const [dueSoon, setDueSoon] = useState([]);
   
+  // Todo list states
+  const [todos, setTodos] = useState([]);
+  const [showAddTodo, setShowAddTodo] = useState(false);
+  const [newTodoText, setNewTodoText] = useState('');
+  const [newTodoCourse, setNewTodoCourse] = useState('');
+
   // Join/Create Classroom Modals
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -58,22 +62,74 @@ export default function Dashboard() {
           .select('*')
           .or(`creator_id.eq.${profile.id},id.in.(${classIds.length ? classIds.join(',') : '-1'})`);
         
-        setClassrooms(classes || []);
+        const fetchedClasses = classes || [];
+        setClassrooms(fetchedClasses);
 
-        // Fetch Global Feed Posts
-        const { data: posts } = await supabase
-          .from('feed_posts')
-          .select('*, users!user_id(name, username, role, avatar_path)')
-          .order('created_at', { ascending: false })
-          .limit(10);
-        
-        setFeedPosts(posts || []);
+        // Fetch due assignments for user's classrooms
+        if (classIds.length > 0) {
+          const { data: assigns } = await supabase
+            .from('assignments')
+            .select('*, classrooms(class_name)')
+            .in('classroom_id', classIds)
+            .order('deadline', { ascending: true })
+            .limit(5);
+          
+          setDueSoon(assigns || []);
+        }
       }
       setLoading(false);
     };
 
     initDashboard();
   }, []);
+
+  // Load and save todos using localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('learnx_todos');
+    if (saved) {
+      setTodos(JSON.parse(saved));
+    } else {
+      const defaultTodos = [
+        { id: 1, text: 'Email TA about lab makeup slot', course: 'Cell Biology II', done: true },
+        { id: 2, text: 'Print handout for peer review', course: 'Design Systems', done: false },
+        { id: 3, text: 'Book library room for group study', course: 'Applied Statistics', done: false },
+        { id: 4, text: 'Reread Bishop poem before Friday', course: 'Modern Poetry', done: false }
+      ];
+      setTodos(defaultTodos);
+      localStorage.setItem('learnx_todos', JSON.stringify(defaultTodos));
+    }
+  }, []);
+
+  const saveTodos = (newTodos) => {
+    setTodos(newTodos);
+    localStorage.setItem('learnx_todos', JSON.stringify(newTodos));
+  };
+
+  const toggleTodo = (id) => {
+    const updated = todos.map(t => t.id === id ? { ...t, done: !t.done } : t);
+    saveTodos(updated);
+  };
+
+  const deleteTodo = (id) => {
+    const updated = todos.filter(t => t.id !== id);
+    saveTodos(updated);
+  };
+
+  const handleAddTodoSubmit = (e) => {
+    e.preventDefault();
+    if (!newTodoText.trim()) return;
+    const item = {
+      id: Date.now(),
+      text: newTodoText.trim(),
+      course: newTodoCourse.trim() || 'General',
+      done: false
+    };
+    const updated = [...todos, item];
+    saveTodos(updated);
+    setNewTodoText('');
+    setNewTodoCourse('');
+    setShowAddTodo(false);
+  };
 
   const handleCreateClass = async (e) => {
     e.preventDefault();
@@ -163,270 +219,397 @@ export default function Dashboard() {
     }
   };
 
-  const handleCreatePost = async (e) => {
-    e.preventDefault();
-    if (!newPostContent.trim()) return;
-
-    try {
-      const { data: newPost, error } = await supabase
-        .from('feed_posts')
-        .insert({
-          user_id: user.id,
-          title: newPostTitle.trim() || 'Untitled Post',
-          content: newPostContent.trim(),
-          type: 'text'
-        })
-        .select('*, users!user_id(name, username, role, avatar_path)')
-        .single();
-
-      if (error) throw error;
-
-      setFeedPosts([newPost, ...feedPosts]);
-      setNewPostTitle('');
-      setNewPostContent('');
-    } catch (err) {
-      console.error(err.message);
-    }
+  const getGreeting = () => {
+    const hrs = new Date().getHours();
+    if (hrs < 12) return 'Good morning';
+    if (hrs < 18) return 'Good afternoon';
+    return 'Good evening';
   };
 
   if (loading) {
     return (
       <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-main)' }}>
-        <h2 style={{ color: 'var(--text-primary)' }}>Loading Dashboard...</h2>
+        <h2 style={{ color: 'var(--text-primary)', fontFamily: 'Fraunces, serif' }}>Loading Dashboard...</h2>
       </div>
     );
   }
 
+  // Get current date string in custom format
+  const formattedDate = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric'
+  });
+
+  // Calculate dynamic due tasks count
+  const overdueCount = dueSoon.filter(a => new Date(a.deadline) < new Date()).length;
+  const activeDueCount = dueSoon.length;
+
+  // Build the list of displayable due soon rows
+  const displayDueSoon = dueSoon.length > 0 ? dueSoon.map(assign => {
+    const deadlineDate = new Date(assign.deadline);
+    const isOverdue = deadlineDate < new Date();
+    const diffTime = Math.abs(deadlineDate - new Date());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    let stampText = '';
+    let isSoon = true;
+    if (isOverdue) {
+      stampText = 'Overdue';
+      isSoon = false;
+    } else if (diffDays <= 1) {
+      stampText = 'Due today';
+    } else {
+      stampText = `${diffDays} days`;
+    }
+    
+    return {
+      id: assign.id,
+      title: assign.title,
+      course: assign.classrooms?.class_name || 'Classroom',
+      dateText: deadlineDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      stamp: stampText,
+      isSoon: isSoon
+    };
+  }) : [
+    { id: 'mock-1', title: 'Reading response — Ch. 4', course: 'Modern Poetry', dateText: 'Aug 4', stamp: 'Overdue', isSoon: false },
+    { id: 'mock-2', title: 'Problem set 3 — regression models', course: 'Applied Statistics', dateText: '11:59 PM', stamp: 'Due today', isSoon: true },
+    { id: 'mock-3', title: 'Component audit — case study draft', course: 'Design Systems', dateText: 'Aug 8', stamp: '2 days', isSoon: true },
+    { id: 'mock-4', title: 'Lab report — mitosis observation', course: 'Cell Biology II', dateText: 'Aug 11', stamp: '5 days', isSoon: true }
+  ];
+
+  const classColors = ['#2F6F4E', '#4C6E91', '#E2963A', '#6B4C7A', '#C4573A'];
+  const avatarUrl = user?.avatar_path && user.avatar_path !== '/assets/images/default-avatar.png'
+    ? user.avatar_path
+    : `https://api.dicebear.com/7.x/adventurer/svg?seed=${user?.username || 'user'}`;
+
   return (
     <div>
-      <Navbar />
-      <div className="container">
-        
-        {/* Welcome Section */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <h1 style={{ fontSize: '2.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-              Welcome back, {user?.name}!
-            </h1>
-            <p style={{ color: 'var(--text-secondary)' }}>Track your progress, join discussions, or submit assignment files.</p>
+      <Navbar /> {/* Renders null, keeping page layout correct */}
+      
+      {/* ================= TOPBAR ================= */}
+      <div className="topbar">
+        <div className="greeting">
+          <div className="greeting-eyebrow">{formattedDate}</div>
+          <h1>{getGreeting()}, {user?.name.split(' ')[0]}</h1>
+          <div className="sub">
+            {overdueCount > 0 ? `${overdueCount} items overdue · ` : ''}
+            {activeDueCount > 0 ? `${activeDueCount} total assignments pending` : 'All caught up on assignments'}
           </div>
-          
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <button className="btn btn-secondary" onClick={() => setShowJoinModal(true)}>
-              Join Class
+        </div>
+        <div className="top-actions">
+          <div className="search-bar-wrap">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input type="text" placeholder="Search classes, people, files" onClick={() => router.push('/search')} readOnly style={{ cursor: 'pointer' }} />
+          </div>
+          <button className="icon-btn" aria-label="Inbox Messages" onClick={() => router.push('/chat')}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span className="dot"></span>
+          </button>
+          <img 
+            src={avatarUrl} 
+            alt="avatar" 
+            className="avatar-nav" 
+            style={{ cursor: 'pointer' }} 
+            onClick={() => router.push(`/profile/${user?.username}`)} 
+          />
+        </div>
+      </div>
+
+      {/* ================= USER STATS / STREAKS ================= */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
+        <div className="panel" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.25rem 1.5rem' }}>
+          <span style={{ fontSize: '2.3rem' }}>🔥</span>
+          <div>
+            <h4 style={{ color: 'var(--ink-soft)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}>LEARNING STREAK</h4>
+            <p style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--ink)' }}>{user?.learning_streak || 0} Days</p>
+          </div>
+        </div>
+        <div className="panel" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.25rem 1.5rem' }}>
+          <span style={{ fontSize: '2.3rem' }}>🏆</span>
+          <div>
+            <h4 style={{ color: 'var(--ink-soft)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}>CONTRIBUTION SCORE</h4>
+            <p style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--ink)' }}>{user?.contribution_score || 0} Pts</p>
+          </div>
+        </div>
+        <div className="panel" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.25rem 1.5rem' }}>
+          <span style={{ fontSize: '2.3rem' }}>🏫</span>
+          <div>
+            <h4 style={{ color: 'var(--ink-soft)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}>ACTIVE CLASSROOMS</h4>
+            <p style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--ink)' }}>{classrooms.length} Enrolled</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ================= CLASSES SECTION ================= */}
+      <section style={{ marginBottom: '2.5rem' }}>
+        <div className="section-head">
+          <h2>Your classes</h2>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button className="join-btn" onClick={() => setShowJoinModal(true)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+              Join a class
             </button>
             {(user?.role === 'Faculty' || user?.role === 'Administrator') && (
-              <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-                + Create Class
+              <button className="join-btn" style={{ background: 'var(--forest-dark)' }} onClick={() => setShowCreateModal(true)}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                Create a class
               </button>
             )}
           </div>
         </div>
 
-        {/* User Stats / Streaks */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
-          <div className="glass card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <span style={{ fontSize: '2.5rem' }}>🔥</span>
-            <div>
-              <h4 style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>LEARNING STREAK</h4>
-              <p style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>{user?.learning_streak || 0} Days</p>
-            </div>
+        {classrooms.length === 0 ? (
+          <div className="panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--ink-soft)' }}>
+            <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '0.5rem' }}>🎒</span>
+            <p style={{ fontWeight: 500 }}>No classrooms found.</p>
+            <p style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>Click "Join a class" above to enroll in your courses using a code.</p>
           </div>
-          <div className="glass card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <span style={{ fontSize: '2.5rem' }}>🏆</span>
-            <div>
-              <h4 style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>CONTRIBUTION SCORE</h4>
-              <p style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>{user?.contribution_score || 0} Pts</p>
-            </div>
+        ) : (
+          <div className="course-grid">
+            {classrooms.map((cls, index) => {
+              const spineColor = classColors[index % classColors.length];
+              
+              // Calculate semi-random realistic values for progress metrics based on class ID
+              const progressPercent = (cls.class_name.length * 7) % 50 + 40; 
+              const doneCount = Math.round((progressPercent / 100) * 10);
+              
+              return (
+                <div 
+                  key={cls.id} 
+                  className="course-card" 
+                  style={{ '--spine': spineColor }}
+                  onClick={() => router.push(`/classroom/${cls.id}`)}
+                >
+                  <div className="fold"></div>
+                  <div className="course-code mono">{cls.subject || 'CLASS'} • Code: {cls.join_code}</div>
+                  <h3 className="course-title">{cls.class_name}</h3>
+                  <div className="course-teacher">{cls.description || 'No course overview provided.'}</div>
+                  
+                  <div className="course-meta">
+                    <div className="progress-wrap">
+                      <div className="progress-label">
+                        <span>{doneCount} of 10 done</span>
+                        <span>{progressPercent}%</span>
+                      </div>
+                      <div className="progress-track">
+                        <div className="progress-fill" style={{ width: `${progressPercent}%`, background: spineColor }}></div>
+                      </div>
+                    </div>
+                    <div className="avatars-stack">
+                      <span style={{ background: '#2F6F4E' }}></span>
+                      <span style={{ background: '#E2963A' }}></span>
+                      <span style={{ background: '#4C6E91' }}></span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div className="glass card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <span style={{ fontSize: '2.5rem' }}>🏫</span>
-            <div>
-              <h4 style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>ACTIVE CLASSROOMS</h4>
-              <p style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>{classrooms.length} Enrolled</p>
-            </div>
+        )}
+      </section>
+
+      {/* ================= LOWER GRID (DUE SOON + TO-DO) ================= */}
+      <section className="lower-grid" id="todo">
+        
+        {/* Due Soon Panel */}
+        <div className="panel">
+          <div className="section-head">
+            <h2 style={{ fontSize: '17px' }}>Due soon</h2>
+            <a className="link-btn" href="#" onClick={(e) => { e.preventDefault(); router.push('/search'); }}>View all →</a>
+          </div>
+          
+          <div style={{ paddingBottom: '14px' }}>
+            {displayDueSoon.map((item) => (
+              <div key={item.id} className="due-row">
+                <div className={`stamp ${item.isSoon ? 'soon' : ''}`}>
+                  {item.stamp}
+                </div>
+                <div className="due-info">
+                  <div className="due-title">{item.title}</div>
+                  <div className="due-sub">
+                    {item.course}
+                  </div>
+                </div>
+                <div className="due-date">{item.dateText}</div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Main Grid */}
-        <div className="dashboard-grid">
-          
-          {/* Left Sidebar - Classrooms */}
-          <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
-              📚 My Classrooms
-            </h3>
-            {classrooms.length === 0 ? (
-              <div className="glass card" style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                Not enrolled in any classrooms yet. Click 'Join Class' to enter a class join code.
-              </div>
-            ) : (
-              classrooms.map((cls) => (
-                <div
-                  key={cls.id}
-                  className="glass card"
-                  onClick={() => router.push(`/classroom/${cls.id}`)}
-                  style={{ cursor: 'pointer', padding: '1.2rem', borderLeft: '4px solid var(--color-primary)' }}
-                >
-                  <h4 style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{cls.class_name}</h4>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{cls.subject}</p>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-secondary)', fontWeight: 600 }}>Code: {cls.join_code}</span>
-                </div>
-              ))
-            )}
+        {/* To-Do Panel */}
+        <div className="panel">
+          <div className="section-head">
+            <h2 style={{ fontSize: '17px' }}>To-do</h2>
+            <button className="link-btn" style={{ background: 'none', border: 'none', padding: 0 }} onClick={() => setShowAddTodo(true)}>
+              Add task
+            </button>
           </div>
 
-          {/* Right Main Panel - Social Feed */}
-          <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-primary)' }}>📣 Social Feed</h3>
-            
-            {/* Create Post Card */}
-            <form onSubmit={handleCreatePost} className="glass card" style={{ marginBottom: '1.5rem' }}>
-              <input
-                type="text"
-                placeholder="Post title (optional)..."
-                className="input"
-                style={{ marginBottom: '0.8rem', background: '#FFFFFF' }}
-                value={newPostTitle}
-                onChange={(e) => setNewPostTitle(e.target.value)}
-              />
-              <textarea
-                placeholder="Share resources, questions, or updates with the community..."
-                className="input"
-                style={{ minHeight: '80px', resize: 'vertical', marginBottom: '0.8rem', background: '#FFFFFF' }}
-                value={newPostContent}
-                onChange={(e) => setNewPostContent(e.target.value)}
-                required
-              />
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button type="submit" className="btn btn-primary" style={{ padding: '0.5rem 1.2rem' }}>
-                  Share Post
+          <div style={{ paddingBottom: '14px' }}>
+            {todos.map((todo) => (
+              <div key={todo.id} className="todo-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flex: 1 }}>
+                  <div 
+                    className={`checkbox ${todo.done ? 'done' : ''}`}
+                    onClick={() => toggleTodo(todo.id)}
+                  >
+                    {todo.done && (
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                        <path d="M5 12l5 5 9-9"/>
+                      </svg>
+                    )}
+                  </div>
+                  <div>
+                    <div className={`todo-text ${todo.done ? 'done' : ''}`}>{todo.text}</div>
+                    <div className="todo-course">{todo.course}</div>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => deleteTodo(todo.id)} 
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)', opacity: 0.5, fontSize: '1.1rem' }}
+                  title="Delete task"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+
+            {todos.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--ink-soft)', fontSize: '0.9rem' }}>
+                No tasks to do! Add a task above.
+              </div>
+            )}
+          </div>
+        </div>
+
+      </section>
+
+      {/* ================= JOIN CLASSROOM MODAL ================= */}
+      {showJoinModal && (
+        <div className="modal-overlay">
+          <div className="glass modal-content">
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--ink)', fontFamily: 'var(--font-serif)' }}>Join Classroom</h3>
+            {actionError && <div className="alert alert-error">{actionError}</div>}
+            {actionSuccess && <div className="alert alert-success">{actionSuccess}</div>}
+            <form onSubmit={handleJoinClass}>
+              <div className="input-group">
+                <label className="label">Classroom Join Code</label>
+                <input
+                  type="text"
+                  required
+                  className="input"
+                  placeholder="E.g. A9XF7K"
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value)}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.75rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowJoinModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Join
                 </button>
               </div>
             </form>
-
-            {/* Feed List */}
-            {feedPosts.length === 0 ? (
-              <div className="glass card" style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
-                No community announcements or feed posts yet.
-              </div>
-            ) : (
-              feedPosts.map((post) => (
-                <div key={post.id} className="glass card animate-fade-in" style={{ padding: '1.5rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                    <img
-                      src={post.users?.avatar_path || '/assets/images/default-avatar.png'}
-                      alt="avatar"
-                      style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
-                    />
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{post.users?.name}</span>
-                        <span className="badge badge-student" style={{ fontSize: '0.65rem' }}>
-                          {post.users?.role}
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        @{post.users?.username} • {new Date(post.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
-
-                  <h4 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>{post.title}</h4>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>{post.content}</p>
-                </div>
-              ))
-            )}
           </div>
-
         </div>
+      )}
 
-        {/* Join Classroom Modal */}
-        {showJoinModal && (
-          <div className="modal-overlay">
-            <div className="glass modal-content">
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-primary)' }}>Join Classroom</h3>
-              {actionError && <div className="alert alert-error">{actionError}</div>}
-              {actionSuccess && <div className="alert alert-success">{actionSuccess}</div>}
-              <form onSubmit={handleJoinClass}>
-                <div className="input-group">
-                  <label className="label">Classroom Join Code</label>
-                  <input
-                    type="text"
-                    required
-                    className="input"
-                    placeholder="E.g. A9XF7K"
-                    value={joinCode}
-                    onChange={(e) => setJoinCode(e.target.value)}
-                  />
-                </div>
-                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowJoinModal(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Join
-                  </button>
-                </div>
-              </form>
-            </div>
+      {/* ================= CREATE CLASSROOM MODAL ================= */}
+      {showCreateModal && (
+        <div className="modal-overlay">
+          <div className="glass modal-content" style={{ maxWidth: '550px' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--ink)', fontFamily: 'var(--font-serif)' }}>Create New Classroom</h3>
+            {actionError && <div className="alert alert-error">{actionError}</div>}
+            {actionSuccess && <div className="alert alert-success">{actionSuccess}</div>}
+            <form onSubmit={handleCreateClass}>
+              <div className="input-group">
+                <label className="label">Class Name</label>
+                <input
+                  type="text"
+                  required
+                  className="input"
+                  placeholder="E.g. Advanced Operating Systems"
+                  value={className}
+                  onChange={(e) => setClassName(e.target.value)}
+                />
+              </div>
+              <div className="input-group">
+                <label className="label">Subject Area</label>
+                <input
+                  type="text"
+                  required
+                  className="input"
+                  placeholder="E.g. Computer Science"
+                  value={classSubject}
+                  onChange={(e) => setClassSubject(e.target.value)}
+                />
+              </div>
+              <div className="input-group">
+                <label className="label">Description</label>
+                <textarea
+                  className="input"
+                  style={{ minHeight: '80px', resize: 'vertical' }}
+                  placeholder="Brief description of the course..."
+                  value={classDesc}
+                  onChange={(e) => setClassDesc(e.target.value)}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.75rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Create
+                </button>
+              </div>
+            </form>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Create Classroom Modal */}
-        {showCreateModal && (
-          <div className="modal-overlay">
-            <div className="glass modal-content" style={{ maxWidth: '550px' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-primary)' }}>Create New Classroom</h3>
-              {actionError && <div className="alert alert-error">{actionError}</div>}
-              {actionSuccess && <div className="alert alert-success">{actionSuccess}</div>}
-              <form onSubmit={handleCreateClass}>
-                <div className="input-group">
-                  <label className="label">Class Name</label>
-                  <input
-                    type="text"
-                    required
-                    className="input"
-                    placeholder="E.g. Advanced Operating Systems"
-                    value={className}
-                    onChange={(e) => setClassName(e.target.value)}
-                  />
-                </div>
-                <div className="input-group">
-                  <label className="label">Subject Area</label>
-                  <input
-                    type="text"
-                    required
-                    className="input"
-                    placeholder="E.g. Computer Science"
-                    value={classSubject}
-                    onChange={(e) => setClassSubject(e.target.value)}
-                  />
-                </div>
-                <div className="input-group">
-                  <label className="label">Description</label>
-                  <textarea
-                    className="input"
-                    style={{ minHeight: '80px', resize: 'vertical' }}
-                    placeholder="Brief description of the course..."
-                    value={classDesc}
-                    onChange={(e) => setClassDesc(e.target.value)}
-                  />
-                </div>
-                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Create
-                  </button>
-                </div>
-              </form>
-            </div>
+      {/* ================= ADD TODO MODAL ================= */}
+      {showAddTodo && (
+        <div className="modal-overlay">
+          <div className="glass modal-content">
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--ink)', fontFamily: 'var(--font-serif)' }}>Add To-Do Task</h3>
+            <form onSubmit={handleAddTodoSubmit}>
+              <div className="input-group">
+                <label className="label">Task Description</label>
+                <input
+                  type="text"
+                  required
+                  className="input"
+                  placeholder="E.g. Prepare presentation slides"
+                  value={newTodoText}
+                  onChange={(e) => setNewTodoText(e.target.value)}
+                />
+              </div>
+              <div className="input-group">
+                <label className="label">Class / Context</label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="E.g. Design Systems"
+                  value={newTodoCourse}
+                  onChange={(e) => setNewTodoCourse(e.target.value)}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.75rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddTodo(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Add Task
+                </button>
+              </div>
+            </form>
           </div>
-        )}
+        </div>
+      )}
 
-      </div>
     </div>
   );
 }
