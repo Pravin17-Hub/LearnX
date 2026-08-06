@@ -9,7 +9,6 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [user, setUser] = useState(null);
   const [classrooms, setClassrooms] = useState([]);
-  const [todoCount, setTodoCount] = useState(0);
 
   useEffect(() => {
     const fetchSidebarData = async () => {
@@ -40,9 +39,6 @@ export default function Sidebar() {
           .or(`creator_id.eq.${profile.id},id.in.(${classIds.length ? classIds.join(',') : '-1'})`);
         
         setClassrooms(classes || []);
-
-        // 3. Simple mock/fetch of todo count (or items)
-        setTodoCount(3); // Match the dashboard's "3 items due"
       }
     };
 
@@ -157,16 +153,7 @@ export default function Sidebar() {
           </a>
         )}
 
-        <div className="tab-group-label">Quick Links</div>
-        <a 
-          className="tab" 
-          href="#"
-          onClick={(e) => { e.preventDefault(); router.push('/dashboard#todo'); }}
-        >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 11l3 3 8-8"/><path d="M21 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11"/></svg>
-          To-do List
-          <span className="count">{todoCount}</span>
-        </a>
+
 
         {classrooms.length > 0 && (
           <>
@@ -194,15 +181,7 @@ export default function Sidebar() {
           </>
         )}
 
-        <div className="tab-group-label">Library</div>
-        <a className="tab" href="#" onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }}>
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          Archived Classes
-        </a>
-        <a className="tab" href="#" onClick={(e) => { e.preventDefault(); router.push('/dashboard'); }}>
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
-          Grade History
-        </a>
+
       </nav>
 
       <div className="sidebar-foot" style={{ marginTop: 'auto' }}>
