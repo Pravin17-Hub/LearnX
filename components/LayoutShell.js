@@ -19,9 +19,18 @@ export default function LayoutShell({ children }) {
 
   // Login page should not render the sidebar layout shell
   const isLoginPage = pathname === '/login';
+  const isQuizPage = pathname?.startsWith('/quiz');
 
   if (isLoginPage) {
     return <>{children}</>;
+  }
+
+  if (isQuizPage) {
+    return (
+      <main style={{ minHeight: '100vh', padding: '34px 44px 60px', transition: 'padding 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+        {children}
+      </main>
+    );
   }
 
   const toggleSidebar = () => {
