@@ -32,8 +32,8 @@ export async function POST(request) {
 
     if (process.env.GEMINI_API_KEY && apiKey === process.env.GEMINI_API_KEY) {
       apiUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
-      model = 'gemini-2.5-flash';
-      ocrModel = 'gemini-2.5-flash';
+      model = 'gemini-3.6-flash';
+      ocrModel = 'gemini-3.6-flash';
     } else if (process.env.GROQ_API_KEY && apiKey === process.env.GROQ_API_KEY) {
       apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
       model = 'llama-3.3-70b-versatile';
