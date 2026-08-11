@@ -82,6 +82,12 @@ export default function AdvancedQuizPage() {
   const lastViolationTime = useRef(0);
   const isWarningModalOpen = useRef(false);
   const topTouchStart = useRef(null);
+  const activeAttemptRef = useRef(activeAttempt);
+  const textSaveDebounce = useRef(null);
+
+  useEffect(() => {
+    activeAttemptRef.current = activeAttempt;
+  }, [activeAttempt]);
 
   useEffect(() => {
     if (!quizId) return;
@@ -203,6 +209,25 @@ export default function AdvancedQuizPage() {
     }, 3000);
 
     const handleBeforeUnload = (e) => {
+      if (activeAttemptRef.current) {
+        const payload = {
+          answers_json: JSON.stringify(answersRef.current),
+          violation_reason: 'EXAMINATION_TERMINATED_UNAPPROVED_EXIT',
+          submit_time: new Date().toISOString()
+        };
+        
+        fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/quiz_attempts?id=eq.${activeAttemptRef.current.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify(payload),
+          keepalive: true
+        });
+      }
+      
       e.preventDefault();
       e.returnValue = "Are you sure you want to leave the exam?";
       return "Are you sure you want to leave the exam?";
@@ -271,30 +296,30 @@ export default function AdvancedQuizPage() {
     }, 200);
 
     // Swipe down from top edge (to view notifications drawer) detection
-    const lastTouchY = { current: null };
+    const startTouchY = { current: null };
 
     const handleTouchMove = (ev) => {
       if (!examStarted.current) return;
       const touch = ev.touches[0];
       const currentY = touch.clientY;
 
-      if (lastTouchY.current === null) {
-        lastTouchY.current = currentY;
+      if (startTouchY.current === null) {
+        startTouchY.current = currentY;
         return;
       }
 
-      const diffY = currentY - lastTouchY.current;
-      lastTouchY.current = currentY;
+      const diffY = currentY - startTouchY.current;
 
-      // Detect if user is at the top of the page, touches near the top notch, and drags down
+      // Detect if user touches near the top notch, and drags down by more than 20px
       const isScrollAtTop = typeof window !== 'undefined' ? (window.scrollY || document.documentElement.scrollTop) < 15 : true;
-      if (isScrollAtTop && currentY < 80 && diffY > 15) {
+      if (isScrollAtTop && startTouchY.current < 100 && diffY > 20) {
+        startTouchY.current = null;
         handleSecurityViolationEvent("swiping status bar / notification drawer");
       }
     };
 
     const handleTouchEnd = () => {
-      lastTouchY.current = null;
+      startTouchY.current = null;
     };
 
     window.addEventListener('touchmove', handleTouchMove, { passive: true });
@@ -960,17 +985,50 @@ export default function AdvancedQuizPage() {
   };
 
   const handleAnswerSelect = (questionId, optionIndex) => {
-    setStudentAnswers((prev) => ({
-      ...prev,
+    const nextAnswers = {
+      ...studentAnswers,
       [questionId]: String(optionIndex)
-    }));
+    };
+    setStudentAnswers(nextAnswers);
+    answersRef.current = nextAnswers;
+
+    if (activeAttemptRef.current) {
+      supabase
+        .from('quiz_attempts')
+        .update({
+          answers_json: JSON.stringify(nextAnswers),
+          submit_time: new Date().toISOString()
+        })
+        .eq('id', activeAttemptRef.current.id)
+        .then(({ error }) => {
+          if (error) console.error('Database write error:', error);
+        });
+    }
   };
 
   const handleTextAnswerChange = (questionId, text) => {
-    setStudentAnswers((prev) => ({
-      ...prev,
+    const nextAnswers = {
+      ...studentAnswers,
       [questionId]: text
-    }));
+    };
+    setStudentAnswers(nextAnswers);
+    answersRef.current = nextAnswers;
+
+    if (textSaveDebounce.current) clearTimeout(textSaveDebounce.current);
+    textSaveDebounce.current = setTimeout(() => {
+      if (activeAttemptRef.current) {
+        supabase
+          .from('quiz_attempts')
+          .update({
+            answers_json: JSON.stringify(nextAnswers),
+            submit_time: new Date().toISOString()
+          })
+          .eq('id', activeAttemptRef.current.id)
+          .then(({ error }) => {
+            if (error) console.error('Database write error:', error);
+          });
+      }
+    }, 500);
   };
 
   const handleAutoSubmit = () => {
