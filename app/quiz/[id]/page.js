@@ -545,35 +545,6 @@ export default function AdvancedQuizPage() {
       });
     }, 200);
 
-    // 14. DOM Mutation Observer to check overlays
-    const domObserver = new MutationObserver((mutations) => {
-      if (!examStarted.current) return;
-      for (let mutation of mutations) {
-        if (mutation.addedNodes.length > 0) {
-          for (let node of mutation.addedNodes) {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              if (
-                node.id === 'warningModal' ||
-                node.id === 'violationModal' ||
-                node.className.includes('tooltip') ||
-                node.className.includes('modal') ||
-                node.tagName.toLowerCase() === 'style' ||
-                node.tagName.toLowerCase() === 'script'
-              ) {
-                continue;
-              }
-              handleSecurityViolationEvent("unauthorized extension overlay injection");
-            }
-          }
-        }
-      }
-    });
-
-    domObserver.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-    });
-
     // Cleanup all event handlers and intervals
     return () => {
       examStarted.current = false;
@@ -607,7 +578,6 @@ export default function AdvancedQuizPage() {
       window.removeEventListener('touchend', handleTouchEnd, { capture: true });
       window.removeEventListener('touchstart', handleTouchStartMulti, { capture: true });
       window.removeEventListener('touchmove', handleTouchMoveMulti, { capture: true });
-      domObserver.disconnect();
     };
   }, [phase]);
 
