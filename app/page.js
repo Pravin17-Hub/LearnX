@@ -5,370 +5,336 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 
-export default function HomePage() {
+export default function MyClassroomsPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
-  const [feedPosts, setFeedPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [classrooms, setClassrooms] = useState([]);
 
-  // Post states
-  const [newPostTitle, setNewPostTitle] = useState('');
-  const [newPostContent, setNewPostContent] = useState('');
-
-  // Comments states
-  const [activeCommentsPostId, setActiveCommentsPostId] = useState(null);
-  const [commentsMap, setCommentsMap] = useState({});
-  const [newCommentContent, setNewCommentContent] = useState('');
-  const [loadingComments, setLoadingComments] = useState(false);
+  // Join/Create Classroom Modals
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [className, setClassName] = useState('');
+  const [classSubject, setClassSubject] = useState('');
+  const [classDesc, setClassDesc] = useState('');
+  const [actionError, setActionError] = useState(null);
+  const [actionSuccess, setActionSuccess] = useState(null);
 
   useEffect(() => {
-    const initHome = async () => {
+    const initClassrooms = async () => {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('email', session.user.email)
-          .single();
-        setUser(profile);
+      if (!session) {
+        router.replace('/login');
+        return;
       }
 
-      // Fetch global live feed posts
-      const { data: posts } = await supabase
-        .from('feed_posts')
-        .select('*, users!user_id(name, username, role, avatar_path)')
-        .order('created_at', { ascending: false })
-        .limit(20);
-      setFeedPosts(posts || []);
+      // Fetch user profile from DB
+      const { data: profile } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', session.user.email)
+        .single();
+      
+      setUser(profile);
 
+      if (profile) {
+        // Fetch Classrooms where user is enrolled or created
+        const { data: memberClassrooms } = await supabase
+          .from('classroom_members')
+          .select('classroom_id')
+          .eq('user_id', profile.id);
+
+        const classIds = memberClassrooms?.map(m => m.classroom_id) || [];
+        
+        let { data: classes } = await supabase
+          .from('classrooms')
+          .select('*, creator:users!creator_id(name)')
+          .or(`creator_id.eq.${profile.id},id.in.(${classIds.length ? classIds.join(',') : '-1'})`);
+        
+        setClassrooms(classes || []);
+      }
       setLoading(false);
     };
 
-    initHome();
+    initClassrooms();
   }, []);
 
-  const handleToggleComments = async (postId) => {
-    if (activeCommentsPostId === postId) {
-      setActiveCommentsPostId(null);
-      return;
-    }
-
-    setActiveCommentsPostId(postId);
-    setLoadingComments(true);
-
-    try {
-      const { data, error } = await supabase
-        .from('post_comments')
-        .select('*, users!user_id(name, username, avatar_path)')
-        .eq('post_id', postId)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-      setCommentsMap((prev) => ({ ...prev, [postId]: data || [] }));
-    } catch (err) {
-      console.error('Error loading comments:', err.message);
-    }
-    setLoadingComments(false);
-  };
-
-  const handleAddComment = async (e, postId) => {
+  const handleCreateClass = async (e) => {
     e.preventDefault();
-    if (!newCommentContent.trim() || !user) return;
-
-    const contentText = newCommentContent.trim();
-    setNewCommentContent('');
+    setActionError(null);
+    setActionSuccess(null);
 
     try {
-      const { data: newComment, error } = await supabase
-        .from('post_comments')
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const { data: newClass, error } = await supabase
+        .from('classrooms')
         .insert({
-          post_id: postId,
-          user_id: user.id,
-          content: contentText
+          class_name: className,
+          subject: classSubject,
+          description: classDesc,
+          join_code: code,
+          creator_id: user.id
         })
-        .select('*, users!user_id(name, username, avatar_path)')
+        .select()
         .single();
 
       if (error) throw error;
 
-      setCommentsMap((prev) => ({
-        ...prev,
-        [postId]: [...(prev[postId] || []), newComment]
-      }));
+      // Creator automatically joins classroom as faculty
+      await supabase.from('classroom_members').insert({
+        classroom_id: newClass.id,
+        user_id: user.id,
+        role_in_class: user.role
+      });
+
+      setClassrooms([...classrooms, newClass]);
+      setActionSuccess(`Classroom created! Join Code: ${code}`);
+      setClassName('');
+      setClassSubject('');
+      setClassDesc('');
+      setTimeout(() => setShowCreateModal(false), 1500);
     } catch (err) {
-      alert(`Error posting comment: ${err.message}`);
+      setActionError(err.message);
     }
   };
 
-  const handleCreatePost = async (e) => {
+  const handleJoinClass = async (e) => {
     e.preventDefault();
-    if (!newPostContent.trim() || !user) return;
+    setActionError(null);
+    setActionSuccess(null);
 
     try {
-      const { data: newPost, error } = await supabase
-        .from('feed_posts')
+      // Find classroom by join code
+      const { data: targetClass, error: findError } = await supabase
+        .from('classrooms')
+        .select('*')
+        .eq('join_code', joinCode.trim().toUpperCase())
+        .maybeSingle();
+
+      if (findError || !targetClass) {
+        throw new Error('Classroom not found. Verify the code and try again.');
+      }
+
+      // Check if already a member
+      const { data: existingMember } = await supabase
+        .from('classroom_members')
+        .select('*')
+        .eq('classroom_id', targetClass.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (existingMember) {
+        throw new Error('You are already a member of this classroom.');
+      }
+
+      // Join classroom
+      const { error: joinError } = await supabase
+        .from('classroom_members')
         .insert({
+          classroom_id: targetClass.id,
           user_id: user.id,
-          title: newPostTitle.trim() || 'Untitled Announcement',
-          content: newPostContent.trim(),
-          type: 'announcement'
-        })
-        .select('*, users!user_id(name, username, role, avatar_path)')
-        .single();
+          role_in_class: user.role
+        });
 
-      if (error) throw error;
+      if (joinError) throw joinError;
 
-      setFeedPosts([newPost, ...feedPosts]);
-      setNewPostTitle('');
-      setNewPostContent('');
+      setClassrooms([...classrooms, targetClass]);
+      setActionSuccess(`Joined ${targetClass.class_name} successfully!`);
+      setJoinCode('');
+      setTimeout(() => setShowJoinModal(false), 1500);
     } catch (err) {
-      console.error(err.message);
+      setActionError(err.message);
     }
-  };
-
-  const getAvatarUrl = (u) => {
-    return u?.avatar_path && u.avatar_path !== '/assets/images/default-avatar.png'
-      ? u.avatar_path
-      : `https://api.dicebear.com/7.x/adventurer/svg?seed=${u?.username}`;
   };
 
   if (loading) {
     return (
       <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-main)' }}>
-        <h2 style={{ color: 'var(--text-primary)' }}>Loading LearnX...</h2>
+        <h2 style={{ color: 'var(--text-primary)' }}>Loading Classrooms...</h2>
       </div>
     );
   }
 
+  const classColors = ['#7A533E', '#8C7A6B', '#C2884E', '#8A6F62', '#A63A26'];
+
   return (
     <div>
       <Navbar />
-      <div className="container" style={{ maxWidth: '1000px' }}>
+      <div className="container" style={{ maxWidth: '1200px' }}>
         
         {/* Banner Section */}
-        <div className="glass card" style={{ padding: '2.5rem', marginBottom: '2.5rem', textAlign: 'center', borderBottom: '4px solid var(--color-primary)' }}>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-            🚀 LearnX Community
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto 1.5rem auto' }}>
-            A collaborative learning network for peers and faculty. Share notes, discuss concepts, and publish announcements in real-time.
-          </p>
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-            <button className="btn btn-primary" onClick={() => router.push('/search')}>
-              🔍 Search Library & Peers
+        <div className="glass card" style={{ padding: '2.5rem', marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem', borderBottom: '4px solid var(--color-primary)' }}>
+          <div>
+            <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+              🏫 My Classrooms
+            </h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '1rem', margin: 0 }}>
+              Access your enrolled classrooms, view evaluations, and participate in discussion forums.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <button className="btn btn-secondary" style={{ padding: '0.8rem 1.8rem', fontSize: '0.95rem', fontWeight: 'bold' }} onClick={() => setShowJoinModal(true)}>
+              🔗 Join Classroom
             </button>
-            {!user && (
-              <button className="btn btn-secondary" onClick={() => router.push('/login')}>
-                Sign In to Share
+            {(user?.role === 'Faculty' || user?.role === 'Administrator') && (
+              <button className="btn btn-primary" style={{ padding: '0.8rem 1.8rem', fontSize: '0.95rem', fontWeight: 'bold' }} onClick={() => setShowCreateModal(true)}>
+                ➕ Create Classroom
               </button>
             )}
           </div>
         </div>
 
-        {/* Feed & Sidebar Grid */}
-        <div className="feed-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '2rem' }}>
-          
-          {/* Main Feed Column */}
-          <div>
-            <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--text-primary)' }}>
-              📣 Live Feed & Announcements
-            </h3>
-
-            {/* Post Creator Form */}
-            {user && (
-              <form onSubmit={handleCreatePost} className="glass card" style={{ marginBottom: '2rem' }}>
-                <h4 style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '0.8rem' }}>Write an announcement...</h4>
-                <input
-                  type="text"
-                  placeholder="Post title (optional)..."
-                  className="input"
-                  style={{ marginBottom: '0.8rem', background: '#FFFFFF' }}
-                  value={newPostTitle}
-                  onChange={(e) => setNewPostTitle(e.target.value)}
-                />
-                <textarea
-                  placeholder="What would you like to share with the community today?"
-                  className="input"
-                  style={{ minHeight: '80px', resize: 'vertical', marginBottom: '0.8rem', background: '#FFFFFF' }}
-                  value={newPostContent}
-                  onChange={(e) => setNewPostContent(e.target.value)}
-                  required
-                />
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button type="submit" className="btn btn-primary" style={{ padding: '0.5rem 1.5rem' }}>
-                    Publish Announcement
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Posts List */}
-            {feedPosts.length === 0 ? (
-              <div className="glass card" style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
-                No active announcements yet.
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gap: '1rem' }}>
-                {feedPosts.map((post) => (
-                  <div key={post.id} className="glass card animate-fade-in" style={{ padding: '1.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                      <img
-                        src={getAvatarUrl(post.users)}
-                        alt="avatar"
-                        style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }}
-                        onClick={() => router.push(`/profile/${post.users?.username}`)}
-                      />
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span 
-                            style={{ fontWeight: 700, color: 'var(--text-primary)', cursor: 'pointer' }}
-                            onClick={() => router.push(`/profile/${post.users?.username}`)}
-                          >
-                            {post.users?.name}
-                          </span>
-                          <span className="badge badge-student" style={{ fontSize: '0.65rem' }}>
-                            {post.users?.role}
-                          </span>
-                        </div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          @{post.users?.username} • {new Date(post.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
+        {/* Classrooms Grid */}
+        {classrooms.length === 0 ? (
+          <div className="glass card" style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-secondary)' }}>
+            <span style={{ fontSize: '3.5rem', display: 'block', marginBottom: '1.5rem' }}>📚</span>
+            <h3 style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>No Enrolled Classrooms</h3>
+            <p style={{ fontSize: '0.95rem', maxWidth: '400px', margin: '0 auto 1.5rem auto' }}>
+              You are not enrolled in any classes yet. Get a join code from your instructor to get started.
+            </p>
+            <button className="btn btn-primary" onClick={() => setShowJoinModal(true)}>
+              Join a Class
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
+            {classrooms.map((cls, index) => {
+              const spineColor = classColors[index % classColors.length];
+              return (
+                <div
+                  key={cls.id}
+                  className="course-card"
+                  onClick={() => router.push(`/classroom/${cls.id}`)}
+                  style={{ 
+                    '--spine': spineColor,
+                    padding: '24px 24px 20px 28px',
+                    cursor: 'pointer',
+                    minHeight: '160px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <div className="fold"></div>
+                  <div>
+                    <div className="course-code mono" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.8, marginBottom: '0.4rem' }}>
+                      {cls.subject}
                     </div>
-
-                    <h4 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>{post.title}</h4>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', whiteSpace: 'pre-wrap', margin: 0 }}>{post.content}</p>
-
-                    <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.8rem' }}>
-                      <button
-                        onClick={() => handleToggleComments(post.id)}
-                        className="btn btn-secondary"
-                        style={{ fontSize: '0.8rem', padding: '0.3rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                      >
-                        💬 Comments
-                      </button>
-                    </div>
-
-                    {activeCommentsPostId === post.id && (
-                      <div className="animate-fade-in" style={{ marginTop: '1rem', background: '#F8FAFC', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                        <h5 style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '0.8rem', color: 'var(--text-primary)' }}>Comments</h5>
-                        
-                        {loadingComments && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Loading comments...</p>}
-                        
-                        {!loadingComments && (!commentsMap[post.id] || commentsMap[post.id].length === 0) && (
-                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No comments yet. Write one below!</p>
-                        )}
-
-                        {!loadingComments && commentsMap[post.id] && (
-                          <div style={{ display: 'grid', gap: '0.8rem', marginBottom: '1rem' }}>
-                            {commentsMap[post.id].map((comm) => (
-                              <div key={comm.id} style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-start' }}>
-                                <img
-                                  src={getAvatarUrl(comm.users)}
-                                  alt="avatar"
-                                  style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }}
-                                />
-                                <div style={{ background: '#FFFFFF', padding: '0.5rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', flex: 1 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.15rem' }}>
-                                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>{comm.users?.name}</span>
-                                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{new Date(comm.created_at).toLocaleDateString()}</span>
-                                  </div>
-                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>{comm.content}</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {user && (
-                          <form onSubmit={(e) => handleAddComment(e, post.id)} style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                            <input
-                              type="text"
-                              required
-                              placeholder="Write a comment..."
-                              className="input"
-                              style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', flex: 1, background: '#FFFFFF' }}
-                              value={newCommentContent}
-                              onChange={(e) => setNewCommentContent(e.target.value)}
-                            />
-                            <button type="submit" className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.4rem 1rem' }}>
-                              Post
-                            </button>
-                          </form>
-                        )}
+                    <h4 className="course-title" style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: '1.3' }}>
+                      {cls.class_name}
+                    </h4>
+                    {cls.creator?.name && (
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                        Faculty: {cls.creator.name}
                       </div>
                     )}
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                      {cls.description}
+                    </p>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Right Sidebar Column */}
-          <div>
-            {user ? (
-              <div className="glass card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
-                <h4 style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>My Details</h4>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-                  <img
-                    src={getAvatarUrl(user)}
-                    alt="avatar"
-                    style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover' }}
-                  />
-                  <div>
-                    <h5 style={{ fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{user.name}</h5>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>@{user.username}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid rgba(0,0,0,0.04)' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      Join Code: <strong className="mono" style={{ color: 'var(--color-primary)' }}>{cls.join_code}</strong>
+                    </span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                      Enter Class →
+                    </span>
                   </div>
                 </div>
-                <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.85rem' }}>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)' }}>Reg No:</span> {user.reg_no || 'N/A'}
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)' }}>Institution:</span> {user.institution || 'N/A'}
-                  </div>
-                </div>
-                <button 
-                  className="btn btn-primary" 
-                  style={{ width: '100%', marginTop: '1.25rem', padding: '0.5rem' }}
-                  onClick={() => router.push(`/profile/${user.username}`)}
-                >
-                  View My Public Profile
-                </button>
-              </div>
-            ) : (
-              <div className="glass card" style={{ padding: '1.5rem', textAlign: 'center' }}>
-                <h4 style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>Welcome to LearnX</h4>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
-                  Register today to create study classrooms, share materials, and follow your classmates.
-                </p>
-                <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => router.push('/login')}>
-                  Sign In / Register
-                </button>
-              </div>
-            )}
-
-            <div className="glass card" style={{ padding: '1.5rem' }}>
-              <h4 style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '1rem' }}>Quick Actions</h4>
-              <div style={{ display: 'grid', gap: '0.75rem' }}>
-                <button className="btn btn-secondary" style={{ textAlign: 'left', width: '100%', fontSize: '0.85rem' }} onClick={() => router.push('/dashboard')}>
-                  🏫 Enter Classrooms
-                </button>
-                <button className="btn btn-secondary" style={{ textAlign: 'left', width: '100%', fontSize: '0.85rem' }} onClick={() => router.push('/communities')}>
-                  👥 Explore Communities
-                </button>
-                <button className="btn btn-secondary" style={{ textAlign: 'left', width: '100%', fontSize: '0.85rem' }} onClick={() => router.push('/chat')}>
-                  💬 Direct Messages
-                </button>
-              </div>
-            </div>
+              );
+            })}
           </div>
-
-        </div>
+        )}
 
       </div>
+
+      {/* ================= JOIN CLASSROOM MODAL ================= */}
+      {showJoinModal && (
+        <div className="modal-overlay">
+          <div className="glass modal-content">
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--text-primary)' }}>Join Classroom</h3>
+            {actionError && <div className="alert alert-error">{actionError}</div>}
+            {actionSuccess && <div className="alert alert-success">{actionSuccess}</div>}
+            <form onSubmit={handleJoinClass}>
+              <div className="input-group">
+                <label className="label">Classroom Join Code</label>
+                <input
+                  type="text"
+                  required
+                  className="input"
+                  placeholder="E.g. A9XF7K"
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value)}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.75rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowJoinModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Join
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= CREATE CLASSROOM MODAL ================= */}
+      {showCreateModal && (
+        <div className="modal-overlay">
+          <div className="glass modal-content" style={{ maxWidth: '550px' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--text-primary)' }}>Create New Classroom</h3>
+            {actionError && <div className="alert alert-error">{actionError}</div>}
+            {actionSuccess && <div className="alert alert-success">{actionSuccess}</div>}
+            <form onSubmit={handleCreateClass}>
+              <div className="input-group">
+                <label className="label">Class Name</label>
+                <input
+                  type="text"
+                  required
+                  className="input"
+                  placeholder="E.g. Advanced Operating Systems"
+                  value={className}
+                  onChange={(e) => setClassName(e.target.value)}
+                />
+              </div>
+              <div className="input-group">
+                <label className="label">Subject Area</label>
+                <input
+                  type="text"
+                  required
+                  className="input"
+                  placeholder="E.g. Computer Science"
+                  value={classSubject}
+                  onChange={(e) => setClassSubject(e.target.value)}
+                />
+              </div>
+              <div className="input-group">
+                <label className="label">Description</label>
+                <textarea
+                  className="input"
+                  style={{ minHeight: '80px', resize: 'vertical' }}
+                  placeholder="Brief description of the course..."
+                  value={classDesc}
+                  onChange={(e) => setClassDesc(e.target.value)}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.75rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Create
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

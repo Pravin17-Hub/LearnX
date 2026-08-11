@@ -29,6 +29,22 @@ export default function AssignmentDetailsPage() {
   const [fileToUpload, setFileToUpload] = useState(null);
   const [isResubmitting, setIsResubmitting] = useState(false);
 
+  // In-Screen Custom Popups / Alerts & Modals
+  const [toast, setToast] = useState(null);
+  const [deleteTargetId, setDeleteTargetId] = useState(null);
+
+  const triggerToast = (title, body) => {
+    setToast({ title, body });
+    setTimeout(() => {
+      setToast(prev => {
+        if (prev && prev.title === title && prev.body === body) {
+          return null;
+        }
+        return prev;
+      });
+    }, 4000);
+  };
+
   useEffect(() => {
     if (!assignmentId) return;
     loadAssignmentData();
@@ -204,7 +220,7 @@ export default function AssignmentDetailsPage() {
       setSubmission(savedSub);
       setIsResubmitting(false);
       setGradingProgress('done');
-      alert(`Assignment submitted successfully! AI score: ${evalData.score}/${assignment.max_marks}`);
+      triggerToast('Submission Successful', `Assignment submitted successfully! AI score: ${evalData.score}/${assignment.max_marks}`);
     } catch (err) {
       setGradingProgress('failed');
       setSubmissionError(err.message);
@@ -235,12 +251,15 @@ export default function AssignmentDetailsPage() {
       setGradingActionMsg(`Marks published successfully! Final Score: ${finalMarks}/${assignment.max_marks}`);
       loadAssignmentData(); // Reload list
     } catch (err) {
-      alert(`Error publication: ${err.message}`);
+      triggerToast('Error publishing marks', err.message);
     }
   };
 
-  const handleDeleteSubmission = async (submissionId) => {
-    if (!confirm('Are you sure you want to permanently delete this student submission? All grading, feedback, and records will be deleted, and the student will be allowed to submit again.')) return;
+  const handleDeleteSubmission = (submissionId) => {
+    setDeleteTargetId(submissionId);
+  };
+
+  const executeDeleteSubmission = async (submissionId) => {
     try {
       const { error } = await supabase
         .from('assignment_submissions')
@@ -249,17 +268,17 @@ export default function AssignmentDetailsPage() {
 
       if (error) throw error;
 
-      alert('Submission deleted successfully.');
+      triggerToast('Success', 'Submission deleted successfully.');
       setSelectedSub(null);
       loadAssignmentData(); // Reload student list
     } catch (err) {
-      alert(`Delete failed: ${err.message}`);
+      triggerToast('Delete failed', err.message);
     }
   };
 
   const handleDownloadExcel = () => {
     if (!submissionsList || submissionsList.length === 0) {
-      alert('No submissions available to download.');
+      triggerToast('Notice', 'No submissions available to download.');
       return;
     }
 
@@ -598,13 +617,77 @@ export default function AssignmentDetailsPage() {
           </div>
         </div>
 
-      </div>
+      {/* ================= CUSTOM CONFIRM DELETE SUBMISSION ================= */}
+      {deleteTargetId && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="glass modal-content" style={{ maxWidth: '400px', padding: '2rem', textAlign: 'center', background: '#FFFFFF' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.8rem', color: 'var(--text-primary)', fontFamily: 'Fraunces, serif' }}>Delete Submission</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '1.75rem' }}>
+              Are you sure you want to permanently delete this student submission? All grading, feedback, and records will be deleted, and the student will be allowed to submit again.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => setDeleteTargetId(null)} 
+                className="btn btn-secondary" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  const targetId = deleteTargetId;
+                  setDeleteTargetId(null);
+                  await executeDeleteSubmission(targetId);
+                }} 
+                className="btn btn-danger" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= IN-SCREEN CUSTOM TOAST NOTIFICATIONS ================= */}
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          background: 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '12px',
+          padding: '1rem 1.25rem',
+          boxShadow: 'var(--shadow-lg)',
+          zIndex: 9999,
+          maxWidth: '320px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.25rem',
+          textAlign: 'left'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--color-primary)' }}>{toast.title}</span>
+            <button 
+              onClick={() => setToast(null)} 
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', padding: '0 0 0 10px' }}
+            >
+              ✕
+            </button>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>{toast.body}</p>
+        </div>
+      )}
+
       <style jsx global>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
       `}</style>
+    </div>
     </div>
   );
 }

@@ -189,6 +189,51 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeletePost = async (postId) => {
+    if (!confirm('Are you sure you want to delete this post/announcement?')) return;
+    try {
+      const { error } = await supabase
+        .from('feed_posts')
+        .delete()
+        .eq('id', postId);
+      if (error) throw error;
+      setFeedPosts(prev => prev.filter(p => p.id !== postId));
+    } catch (err) {
+      alert(`Error deleting announcement: ${err.message}`);
+    }
+  };
+
+  const renderMessageWithLinks = (content, linkColor = 'var(--color-primary)') => {
+    if (!content) return '';
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+    
+    return parts.map((part, index) => {
+      if (part.startsWith('http://') || part.startsWith('https://')) {
+        return (
+          <a 
+            key={index} 
+            href={part} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            style={{ 
+              color: linkColor, 
+              textDecoration: 'underline', 
+              fontWeight: '700',
+              wordBreak: 'break-all',
+              cursor: 'pointer',
+              position: 'relative',
+              zIndex: 5
+            }}
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
   const getGreeting = () => {
     const hrs = new Date().getHours();
     if (hrs < 12) return 'Good morning';
@@ -366,27 +411,40 @@ export default function Dashboard() {
                 : `https://api.dicebear.com/7.x/adventurer/svg?seed=${post.users?.username || 'user'}`;
               return (
                 <div key={post.id} className="panel animate-fade-in" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                    <img
-                      src={postAvatarUrl}
-                      alt="avatar"
-                      style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
-                    />
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{post.users?.name}</span>
-                        <span className="badge badge-student" style={{ fontSize: '0.65rem' }}>
-                          {post.users?.role}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <img
+                        src={postAvatarUrl}
+                        alt="avatar"
+                        style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                      />
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{post.users?.name}</span>
+                          <span className="badge badge-student" style={{ fontSize: '0.65rem' }}>
+                            {post.users?.role}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          @{post.users?.username} • {new Date(post.created_at).toLocaleDateString()}
                         </span>
                       </div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        @{post.users?.username} • {new Date(post.created_at).toLocaleDateString()}
-                      </span>
                     </div>
+                    {user && (post.user_id === user.id || user.role === 'Administrator') && (
+                      <button
+                        onClick={() => handleDeletePost(post.id)}
+                        className="btn btn-danger"
+                        style={{ padding: '0.3rem 0.6rem', fontSize: '0.7rem' }}
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
 
                   <h4 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--text-primary)', fontFamily: 'var(--font-serif)' }}>{post.title}</h4>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', whiteSpace: 'pre-wrap', margin: 0 }}>{post.content}</p>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', whiteSpace: 'pre-wrap', margin: 0 }}>
+                    {renderMessageWithLinks(post.content)}
+                  </p>
                 </div>
               );
             })

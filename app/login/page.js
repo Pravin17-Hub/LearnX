@@ -26,7 +26,7 @@ export default function LoginPage() {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        router.push('/dashboard');
+        router.push('/');
       }
     };
     checkUser();
@@ -69,7 +69,7 @@ export default function LoginPage() {
         }
 
         setMessage('Logged in successfully! Redirecting...');
-        setTimeout(() => router.push('/dashboard'), 1000);
+        setTimeout(() => router.push('/'), 1000);
       } else {
         // Sign Up
         if (!email.match(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/)) {

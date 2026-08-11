@@ -39,6 +39,35 @@ export default function AdvancedQuizPage() {
   const [currentAttempt, setCurrentAttempt] = useState(null);
   const [feedbackDetails, setFeedbackDetails] = useState({});
 
+  // Active attempt and instruction state
+  const [activeAttempt, setActiveAttempt] = useState(null);
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [completedStudentsCount, setCompletedStudentsCount] = useState(0);
+
+  // In-Screen Custom Popups / Alerts & Modals
+  const [toast, setToast] = useState(null);
+  const [deleteTargetId, setDeleteTargetId] = useState(null);
+  const [grantAccessTarget, setGrantAccessTarget] = useState(null);
+  const [pdfConfirmTarget, setPdfConfirmTarget] = useState(null);
+  const [editMarksTarget, setEditMarksTarget] = useState(null);
+  const [editMarksValue, setEditMarksValue] = useState('');
+
+  const triggerToast = (title, body) => {
+    setToast({ title, body });
+    setTimeout(() => {
+      setToast(prev => {
+        if (prev && prev.title === title && prev.body === body) {
+          return null;
+        }
+        return prev;
+      });
+    }, 4000);
+  };
+  const [totalClassroomStudents, setTotalClassroomStudents] = useState(0);
+  const [isClassCreator, setIsClassCreator] = useState(false);
+
+  const answersRef = useRef({});
+
   // --- CHEATING PREVENTION / VIOLATION STATES ---
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [showViolationModal, setShowViolationModal] = useState(false);
@@ -50,11 +79,46 @@ export default function AdvancedQuizPage() {
   const examStarted = useRef(false);
   const trustedRadioChecks = useRef({});
   const isGracePeriod = useRef(true);
+  const lastViolationTime = useRef(0);
+  const isWarningModalOpen = useRef(false);
 
   useEffect(() => {
     if (!quizId) return;
     loadInitialData();
   }, [quizId]);
+
+  // URL Phase synchronization to act as separate pages
+  useEffect(() => {
+    const handlePhasePop = () => {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const urlPhase = params.get('phase') || 'view';
+
+        if (phase === 'playing' && urlPhase !== 'playing') {
+          // Block popstate transition away from active exam without confirmation
+          window.history.pushState(null, '', '?phase=playing');
+          return;
+        }
+
+        if (urlPhase === 'result') {
+          const attemptId = params.get('attemptId');
+          const matchedAtt = allAttemptsList.find(a => String(a.id) === attemptId);
+          if (matchedAtt) {
+            setCurrentAttempt(matchedAtt);
+            setFeedbackDetails(JSON.parse(matchedAtt.ai_feedback || '{}'));
+            setPhase('result');
+          } else {
+            setPhase('view');
+          }
+        } else {
+          setPhase('view');
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePhasePop);
+    return () => window.removeEventListener('popstate', handlePhasePop);
+  }, [phase, allAttemptsList]);
 
   // Main countdown timer
   useEffect(() => {
@@ -76,6 +140,32 @@ export default function AdvancedQuizPage() {
     };
   }, [phase, timeLeft]);
 
+  // Sync studentAnswers to ref
+  useEffect(() => {
+    answersRef.current = studentAnswers;
+  }, [studentAnswers]);
+
+  // Autosave answers every 3 seconds
+  useEffect(() => {
+    if (phase !== 'playing' || !activeAttempt) return;
+
+    const interval = setInterval(async () => {
+      try {
+        await supabase
+          .from('quiz_attempts')
+          .update({
+            answers_json: JSON.stringify(answersRef.current),
+            submit_time: new Date().toISOString()
+          })
+          .eq('id', activeAttempt.id);
+      } catch (e) {
+        console.error('Autosave failed:', e);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [phase, activeAttempt]);
+
   // --- SECURE EXAM CONTROLS LIFE-CYCLE ---
   useEffect(() => {
     if (phase !== 'playing') {
@@ -92,6 +182,24 @@ export default function AdvancedQuizPage() {
     const graceTimer = setTimeout(() => {
       isGracePeriod.current = false;
     }, 3000);
+
+    // Browser Back Button & Reload Protection
+    const handlePopState = (e) => {
+      window.history.pushState(null, '', window.location.href);
+      if (confirm("⚠️ WARNING: You are in the middle of an active exam. Going back will terminate and auto-submit your exam. Are you sure you want to go back?")) {
+        submitQuiz(false, "user navigated back from exam");
+      }
+    };
+
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "Are you sure you want to leave the exam?";
+      return "Are you sure you want to leave the exam?";
+    };
+
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     // 1. Fullscreen request
     enterFullscreen();
@@ -187,6 +295,19 @@ export default function AdvancedQuizPage() {
       }
     };
     const tamperTimer = setInterval(detectVisibilityTampering, 1000);
+
+    // Fullscreen integrity interval check (every 1 sec)
+    const secureInterval = setInterval(() => {
+      if (!examStarted.current || isGracePeriod.current || isWarningModalOpen.current) return;
+      
+      const isFull = document.fullscreenElement || 
+                     document.webkitIsFullScreen || 
+                     document.mozFullScreen || 
+                     document.msFullscreenElement;
+      if (!isFull) {
+        handleSecurityViolationEvent("exiting fullscreen mode");
+      }
+    }, 1000);
 
     // 7. Clipboard and drag/drop blocks
     const blockClipboardOrDrag = (e) => {
@@ -345,6 +466,8 @@ export default function AdvancedQuizPage() {
     return () => {
       examStarted.current = false;
       clearTimeout(graceTimer);
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
       document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
@@ -355,6 +478,7 @@ export default function AdvancedQuizPage() {
       clearInterval(throttlingTimer);
       cancelAnimationFrame(frameId);
       clearInterval(tamperTimer);
+      clearInterval(secureInterval);
       window.removeEventListener('copy', blockClipboardOrDrag, true);
       window.removeEventListener('cut', blockClipboardOrDrag, true);
       window.removeEventListener('paste', blockClipboardOrDrag, true);
@@ -383,16 +507,13 @@ export default function AdvancedQuizPage() {
   };
 
   const handleSecurityViolationEvent = (reason) => {
-    if (!examStarted.current) return;
+    if (!examStarted.current || isGracePeriod.current || isWarningModalOpen.current) return;
 
-    // Avoid multiple trigger alerts in the same blur cycle
-    if (!isWindowFocused.current) return;
-
-    isWindowFocused.current = false;
     securityViolationCount.current += 1;
     setWarningViolationType(reason);
 
-    if (securityViolationCount.current === 1) {
+    if (securityViolationCount.current <= 4) {
+      isWarningModalOpen.current = true;
       setShowWarningModal(true);
     } else {
       triggerSecurityViolation(reason);
@@ -401,19 +522,28 @@ export default function AdvancedQuizPage() {
 
   const triggerSecurityViolation = (reason) => {
     examStarted.current = false;
+    isWarningModalOpen.current = false;
     submitQuiz(false, reason);
   };
 
   const dismissWarning = () => {
     setShowWarningModal(false);
-    isWindowFocused.current = true;
+    isWarningModalOpen.current = false;
+    isGracePeriod.current = true;
     enterFullscreen();
+    setTimeout(() => {
+      isGracePeriod.current = false;
+    }, 1500);
   };
 
   const dismissViolation = () => {
     setShowViolationModal(false);
-    isWindowFocused.current = true;
+    isWarningModalOpen.current = false;
+    isGracePeriod.current = true;
     enterFullscreen();
+    setTimeout(() => {
+      isGracePeriod.current = false;
+    }, 1500);
   };
 
   const enterFullscreen = () => {
@@ -435,14 +565,21 @@ export default function AdvancedQuizPage() {
       return;
     }
 
-    const headers = ['Register Number', 'Student Name', 'Marks Obtained', 'Max Marks', 'Violation Reason', 'Submit Time'];
-    const rows = allAttemptsList.map(att => [
+    const completedAttempts = allAttemptsList.filter(att => att.violation_reason !== 'IN_PROGRESS');
+
+    completedAttempts.sort((a, b) => {
+      const regA = a.users?.reg_no || '';
+      const regB = b.users?.reg_no || '';
+      return regA.localeCompare(regB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    const headers = ['Register Number', 'Student Name', 'Marks Obtained', 'Max Marks', 'Violation Reason'];
+    const rows = completedAttempts.map(att => [
       `"\t${att.users?.reg_no || 'Guest/N/A'}"`,
       `"${att.users?.name || att.guest_name || 'Guest User'}"`,
       att.score,
       att.max_score || quiz?.max_marks || 0,
-      `"${att.violation_reason || 'None'}"`,
-      new Date(att.submit_time).toLocaleString()
+      `"${att.violation_reason || 'None'}"`
     ]);
 
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
@@ -475,14 +612,32 @@ export default function AdvancedQuizPage() {
     // Fetch Quiz
     const { data: qz } = await supabase
       .from('quizzes')
-      .select('*')
+      .select('*, classrooms(creator_id)')
       .eq('id', quizId)
       .single();
     setQuiz(qz);
 
     if (qz) {
-      const teacherRole = profile && (profile.role === 'Faculty' || profile.role === 'Administrator' || qz.creator_id === profile.id);
+      const isStudent = profile && (profile.role === 'Student' || profile.role === 'Teaching Assistant' || profile.role === 'Research Scholar' || profile.role === 'Mentor');
+      const teacherRole = profile && !isStudent && (profile.role === 'Faculty' || profile.role === 'Administrator' || qz.creator_id === profile.id);
       setIsTeacher(teacherRole);
+
+      const classroomCreatorId = qz.classrooms?.creator_id || qz.creator_id;
+      const classCreatorRole = profile && !isStudent && (profile.role === 'Administrator' || classroomCreatorId === profile.id);
+      setIsClassCreator(classCreatorRole);
+
+      // Fetch classroom members count (where role is student)
+      if (qz.classroom_id) {
+        const { data: membersData } = await supabase
+          .from('classroom_members')
+          .select('*, users!user_id(role)')
+          .eq('classroom_id', qz.classroom_id);
+          
+        if (membersData) {
+          const totalStudents = membersData.filter(m => m.users?.role === 'Student' || m.users?.role === 'Teaching Assistant' || m.users?.role === 'Research Scholar' || m.users?.role === 'Mentor').length;
+          setTotalClassroomStudents(totalStudents);
+        }
+      }
 
       // Fetch Questions
       const { data: qns } = await supabase
@@ -500,18 +655,35 @@ export default function AdvancedQuizPage() {
         .limit(10);
       setLeaderboard(lb || []);
 
+      // Fetch count of completed students
+      const { data: countData } = await supabase
+        .from('quiz_attempts')
+        .select('violation_reason, users(role)')
+        .eq('quiz_id', quizId);
+      
+      const compCount = countData 
+        ? countData.filter(att => {
+            const isCompleted = att.violation_reason !== 'IN_PROGRESS';
+            const userRole = att.users?.role;
+            const isFacultyOrAdmin = userRole === 'Faculty' || userRole === 'Administrator';
+            return isCompleted && !isFacultyOrAdmin;
+          }).length 
+        : 0;
+      setCompletedStudentsCount(compCount);
+
       // Fetch user's own past attempt
       if (profile) {
-        const { data: past } = await supabase
+        const { data: attempts } = await supabase
           .from('quiz_attempts')
           .select('*')
           .eq('quiz_id', quizId)
           .eq('student_id', profile.id)
-          .order('score', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .order('id', { ascending: false });
+        
+        const past = attempts && attempts.length > 0 ? attempts[0] : null;
         setPastAttempt(past);
-        if (past && !teacherRole) {
+        
+        if (past && past.violation_reason !== 'IN_PROGRESS' && !teacherRole) {
           setCurrentAttempt(past);
           try {
             setFeedbackDetails(JSON.parse(past.ai_feedback || '{}'));
@@ -519,6 +691,18 @@ export default function AdvancedQuizPage() {
             setFeedbackDetails({});
           }
           setPhase('result');
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(null, '', `?phase=result&attemptId=${past.id}`);
+          }
+        } else if (past && past.violation_reason === 'IN_PROGRESS' && !teacherRole) {
+          setActiveAttempt(past);
+          let loadedAnswers = {};
+          try {
+            loadedAnswers = JSON.parse(past.answers_json || '{}');
+          } catch (e) {
+            loadedAnswers = {};
+          }
+          setStudentAnswers(loadedAnswers);
         }
       }
 
@@ -526,24 +710,181 @@ export default function AdvancedQuizPage() {
       if (teacherRole) {
         const { data: attempts } = await supabase
           .from('quiz_attempts')
-          .select('*, users(name, username, reg_no)')
+          .select('*, users(name, username, reg_no, role)')
           .eq('quiz_id', quizId)
           .order('submit_time', { ascending: false });
-        setAllAttemptsList(attempts || []);
+        
+        const filteredAttempts = (attempts || []).filter(att => {
+          const role = att.users?.role;
+          return role !== 'Faculty' && role !== 'Administrator';
+        });
+        setAllAttemptsList(filteredAttempts);
       }
     }
 
     setLoading(false);
   };
 
-  const handleStartQuiz = () => {
-    if (quiz?.is_public && !user && !guestName.trim()) {
+  const getScheduleStatus = () => {
+    if (!quiz) return { isAccessible: true };
+    if (!quiz.scheduled_start && !quiz.scheduled_end) return { isAccessible: true };
+
+    const now = new Date();
+    const start = quiz.scheduled_start ? new Date(quiz.scheduled_start) : null;
+    const end = quiz.scheduled_end ? new Date(quiz.scheduled_end) : null;
+
+    if (start && now < start) {
+      return { 
+        isAccessible: false, 
+        message: `This exam has not started yet. It is scheduled to start at ${start.toLocaleString()}.` 
+      };
+    }
+
+    if (end && now > end) {
+      return { 
+        isAccessible: false, 
+        message: `This exam is closed. The scheduled end time was ${end.toLocaleString()}.` 
+      };
+    }
+
+    return { isAccessible: true };
+  };
+
+  const handleStartQuizClick = async () => {
+    const schedule = getScheduleStatus();
+    if (!isClassCreator && !isTeacher && !schedule.isAccessible) {
+      alert(schedule.message);
+      return;
+    }
+
+    const trimmedGuest = guestName.trim();
+    if (quiz?.is_public && !user && !trimmedGuest) {
       alert('Please enter your name to begin the public test.');
       return;
     }
-    enterFullscreen();
-    setPhase('playing');
-    setTimeLeft((quiz?.duration_minutes || 30) * 60);
+    
+    if (!user && trimmedGuest) {
+      const { data: attempts } = await supabase
+        .from('quiz_attempts')
+        .select('*')
+        .eq('quiz_id', quizId)
+        .eq('guest_name', trimmedGuest)
+        .order('id', { ascending: false });
+        
+      const past = attempts && attempts.length > 0 ? attempts[0] : null;
+      if (past) {
+        if (past.violation_reason !== 'IN_PROGRESS') {
+          setPastAttempt(past);
+          setCurrentAttempt(past);
+          try {
+            setFeedbackDetails(JSON.parse(past.ai_feedback || '{}'));
+          } catch (e) {
+            setFeedbackDetails({});
+          }
+          setPhase('result');
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(null, '', `?phase=result&attemptId=${past.id}`);
+          }
+          setGuestAttempted(true);
+          return;
+        } else {
+          setPastAttempt(past);
+          setActiveAttempt(past);
+          let loadedAnswers = {};
+          try {
+            loadedAnswers = JSON.parse(past.answers_json || '{}');
+          } catch (e) {
+            loadedAnswers = {};
+          }
+          setStudentAnswers(loadedAnswers);
+        }
+      }
+    }
+    
+    setShowInstructions(true);
+  };
+
+  const handleStartQuiz = async () => {
+    const schedule = getScheduleStatus();
+    if (!isClassCreator && !isTeacher && !schedule.isAccessible) {
+      alert(schedule.message);
+      return;
+    }
+    try {
+      let attempt = activeAttempt;
+      
+      if (!attempt) {
+        if (user) {
+          const { data: existing } = await supabase
+            .from('quiz_attempts')
+            .select('*')
+            .eq('quiz_id', quizId)
+            .eq('student_id', user.id)
+            .eq('violation_reason', 'IN_PROGRESS')
+            .maybeSingle();
+          attempt = existing;
+        } else if (guestName.trim()) {
+          const { data: existing } = await supabase
+            .from('quiz_attempts')
+            .select('*')
+            .eq('quiz_id', quizId)
+            .eq('guest_name', guestName.trim())
+            .eq('violation_reason', 'IN_PROGRESS')
+            .maybeSingle();
+          attempt = existing;
+        }
+      }
+
+      if (!attempt) {
+        const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
+        const { data: newAttempt, error: insertError } = await supabase
+          .from('quiz_attempts')
+          .insert({
+            quiz_id: quizId,
+            student_id: user?.id || null,
+            guest_name: user ? null : guestName.trim(),
+            score: 0,
+            max_score: totalPoints,
+            answers_json: '{}',
+            ai_feedback: '{}',
+            violation_reason: 'IN_PROGRESS',
+            auto_saved: true
+          })
+          .select()
+          .single();
+        if (insertError) throw insertError;
+        attempt = newAttempt;
+      } else {
+        let loadedAnswers = {};
+        try {
+          loadedAnswers = JSON.parse(attempt.answers_json || '{}');
+        } catch (e) {
+          loadedAnswers = {};
+        }
+        setStudentAnswers(loadedAnswers);
+      }
+
+      setActiveAttempt(attempt);
+      securityViolationCount.current = 0;
+      enterFullscreen();
+      setPhase('playing');
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', '?phase=playing');
+      }
+      
+      let duration = (quiz?.duration_minutes || 30) * 60;
+      if (quiz?.scheduled_start && quiz?.scheduled_end) {
+        const endTime = new Date(quiz.scheduled_end).getTime();
+        duration = Math.floor((endTime - Date.now()) / 1000);
+        duration = Math.max(0, duration);
+      } else if (attempt && attempt.start_time) {
+        const elapsed = Math.floor((Date.now() - new Date(attempt.start_time).getTime()) / 1000);
+        duration = Math.max(10, duration - elapsed);
+      }
+      setTimeLeft(duration);
+    } catch (err) {
+      alert(`Failed to initialize quiz session: ${err.message}`);
+    }
   };
 
   const handleAnswerSelect = (questionId, optionIndex) => {
@@ -588,7 +929,7 @@ export default function AdvancedQuizPage() {
       // 1. Grade MCQs locally
       for (const q of questions) {
         totalMaxMarks += q.points;
-        const studentAns = studentAnswers[q.id] || '';
+        const studentAns = answersRef.current[q.id] || '';
 
         const itemFeedback = {
           questionText: q.question_text,
@@ -632,11 +973,11 @@ export default function AdvancedQuizPage() {
       // 2. Grade Theory questions via serverless AI
       const theoryQuestions = questions.filter(q => q.question_type !== 'MCQ');
       
-      if (theoryQuestions.length > 0 && !violationReasonVal) {
+      if (theoryQuestions.length > 0) {
         setSubmissionProgress('grading_theory');
         
         for (const q of theoryQuestions) {
-          const studentAns = studentAnswers[q.id] || '';
+          const studentAns = answersRef.current[q.id] || '';
           const itemFeedback = {
             questionText: q.question_text,
             questionType: q.question_type,
@@ -689,22 +1030,9 @@ export default function AdvancedQuizPage() {
               itemFeedback.feedback = 'AI grader was busy. Awarded half-marks for completion.';
             }
           } else {
-            itemFeedback.feedback = 'No answer submitted.';
+            itemFeedback.feedback = violationReasonVal ? 'No answer submitted before secure environment termination.' : 'No answer submitted.';
           }
           feedbackMap[q.id] = itemFeedback;
-        }
-      } else if (violationReasonVal) {
-        // If auto-submitted due to violation, grade remaining theory questions as 0 marks
-        for (const q of theoryQuestions) {
-          feedbackMap[q.id] = {
-            questionText: q.question_text,
-            questionType: q.question_type,
-            studentAnswer: studentAnswers[q.id] || '',
-            maxMarks: q.points,
-            score: 0,
-            feedback: 'Evaluation suspended: Quiz auto-submitted due to a security violation.',
-            correct: false
-          };
         }
       }
 
@@ -713,23 +1041,46 @@ export default function AdvancedQuizPage() {
       // 3. Save Attempt to Supabase
       setSubmissionProgress('saving');
       
-      const { data: attempt, error: attemptError } = await supabase
-        .from('quiz_attempts')
-        .insert({
-          quiz_id: quizId,
-          student_id: user?.id || null,
-          guest_name: user ? null : guestName.trim(),
-          score: finalScore,
-          max_score: totalMaxMarks,
-          answers_json: JSON.stringify(studentAnswers),
-          ai_feedback: JSON.stringify(feedbackMap),
-          auto_saved: isAutoSaved,
-          violation_reason: violationReasonVal
-        })
-        .select()
-        .single();
-
-      if (attemptError) throw attemptError;
+      let attempt = null;
+      if (activeAttempt?.id) {
+        const { data: updatedAttempt, error: attemptError } = await supabase
+          .from('quiz_attempts')
+          .update({
+            score: finalScore,
+            max_score: totalMaxMarks,
+            answers_json: JSON.stringify(answersRef.current),
+            ai_feedback: JSON.stringify(feedbackMap),
+            auto_saved: isAutoSaved,
+            violation_reason: violationReasonVal,
+            submit_time: new Date().toISOString()
+          })
+          .eq('id', activeAttempt.id)
+          .select()
+          .single();
+          
+        if (attemptError) throw attemptError;
+        attempt = updatedAttempt;
+      } else {
+        const { data: insertedAttempt, error: attemptError } = await supabase
+          .from('quiz_attempts')
+          .insert({
+            quiz_id: quizId,
+            student_id: user?.id || null,
+            guest_name: user ? null : guestName.trim(),
+            score: finalScore,
+            max_score: totalMaxMarks,
+            answers_json: JSON.stringify(answersRef.current),
+            ai_feedback: JSON.stringify(feedbackMap),
+            auto_saved: isAutoSaved,
+            violation_reason: violationReasonVal,
+            submit_time: new Date().toISOString()
+          })
+          .select()
+          .single();
+          
+        if (attemptError) throw attemptError;
+        attempt = insertedAttempt;
+      }
 
       // 4. Update student points
       if (user && !violationReasonVal) {
@@ -743,6 +1094,9 @@ export default function AdvancedQuizPage() {
       setPastAttempt(attempt);
       setFeedbackDetails(feedbackMap);
       setPhase('result');
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', `?phase=result&attemptId=${attempt.id}`);
+      }
       
       if (!user) {
         setGuestAttempted(true);
@@ -755,8 +1109,15 @@ export default function AdvancedQuizPage() {
     }
   };
 
-  const handleDeleteAttempt = async (attemptId) => {
-    if (!confirm('Are you sure you want to delete this student attempt record?')) return;
+  const handleDeleteAttempt = (attemptId) => {
+    if (!isClassCreator) {
+      triggerToast("Permission denied", "Only the classroom creator can delete attempt records.");
+      return;
+    }
+    setDeleteTargetId(attemptId);
+  };
+
+  const executeDeleteAttempt = async (attemptId) => {
     try {
       const { error } = await supabase
         .from('quiz_attempts')
@@ -766,9 +1127,9 @@ export default function AdvancedQuizPage() {
       if (error) throw error;
 
       setAllAttemptsList(allAttemptsList.filter(a => a.id !== attemptId));
-      alert('Attempt deleted successfully.');
+      triggerToast('Success', 'Attempt deleted successfully.');
     } catch (err) {
-      alert(`Delete failed: ${err.message}`);
+      triggerToast('Delete failed', err.message);
     }
   };
 
@@ -782,6 +1143,317 @@ export default function AdvancedQuizPage() {
     }
     setFeedbackDetails(parsedFeedback);
     setPhase('result');
+    if (typeof window !== 'undefined') {
+      window.history.pushState(null, '', `?phase=result&attemptId=${attempt.id}`);
+    }
+  };
+
+  const handleEditMarks = (attempt) => {
+    if (!isClassCreator) {
+      triggerToast("Permission denied", "Only the classroom creator can edit marks.");
+      return;
+    }
+    setEditMarksTarget(attempt);
+    setEditMarksValue(String(attempt.score));
+  };
+
+  const executeEditMarks = async (attempt, newScoreVal) => {
+    const newScore = parseInt(newScoreVal, 10);
+    if (isNaN(newScore) || newScore < 0 || newScore > attempt.max_score) {
+      triggerToast('Invalid score', `Please enter a number between 0 and ${attempt.max_score}.`);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('quiz_attempts')
+        .update({ score: newScore })
+        .eq('id', attempt.id);
+        
+      if (error) throw error;
+      
+      setAllAttemptsList(prev => prev.map(a => a.id === attempt.id ? { ...a, score: newScore } : a));
+      setCurrentAttempt(prev => prev && prev.id === attempt.id ? { ...prev, score: newScore } : prev);
+      triggerToast('Success', 'Marks updated successfully!');
+    } catch (err) {
+      triggerToast('Failed to update marks', err.message);
+    }
+  };
+
+  const handleGrantAccess = (attempt) => {
+    if (!isClassCreator) {
+      triggerToast("Permission denied", "Only the classroom creator can grant continue access.");
+      return;
+    }
+    setGrantAccessTarget(attempt);
+  };
+
+  const executeGrantAccess = async (attempt) => {
+    try {
+      const { error } = await supabase
+        .from('quiz_attempts')
+        .update({
+          violation_reason: 'IN_PROGRESS',
+          score: 0,
+          ai_feedback: '{}',
+          start_time: new Date().toISOString(),
+          submit_time: new Date().toISOString()
+        })
+        .eq('id', attempt.id);
+
+      if (error) throw error;
+
+      setAllAttemptsList(prev => prev.map(a => a.id === attempt.id ? { 
+        ...a, 
+        violation_reason: 'IN_PROGRESS',
+        score: 0,
+        ai_feedback: '{}'
+      } : a));
+      
+      triggerToast('Access granted', 'The student can now refresh and resume their test.');
+    } catch (err) {
+      triggerToast('Failed to grant access', err.message);
+    }
+  };
+
+  const handleDownloadPDF = (attempt) => {
+    setPdfConfirmTarget(attempt);
+  };
+
+  const executeDownloadPDF = (attempt, includeFeedback) => {
+    const studentName = attempt.users?.name || attempt.guest_name || 'Guest Student';
+    const regNo = attempt.users?.reg_no || 'N/A';
+    const testName = quiz?.title || 'Academic Evaluation';
+    
+    let parsedFeedback = {};
+    try {
+      parsedFeedback = JSON.parse(attempt.ai_feedback || '{}');
+    } catch (e) {
+      parsedFeedback = {};
+    }
+    
+    let answers = {};
+    try {
+      answers = JSON.parse(attempt.answers_json || '{}');
+    } catch (e) {
+      answers = {};
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      triggerToast('Popup Blocker', 'Please allow popups to download the PDF.');
+      return;
+    }
+
+    let questionsHtml = '';
+    questions.forEach((q, idx) => {
+      const studentAns = answers[q.id] || '[No Answer Provided]';
+      const feedback = parsedFeedback[q.id] || {};
+      const score = feedback.score !== undefined ? feedback.score : 0;
+      
+      let optionsHtml = '';
+      if (q.question_type === 'MCQ') {
+        let options = [];
+        try {
+          options = JSON.parse(q.options_json || '[]');
+        } catch (e) {
+          options = [];
+        }
+        optionsHtml = `<div class="options">
+          ${options.map((opt, optIdx) => {
+            const isSelected = studentAns === String(optIdx);
+            return `<div class="option ${isSelected ? 'selected' : ''}">
+              <span class="option-marker">${String.fromCharCode(65 + optIdx)}.</span> ${opt} ${isSelected ? '<strong>(Selected)</strong>' : ''}
+            </div>`;
+          }).join('')}
+        </div>`;
+      }
+
+      questionsHtml += `
+        <div class="question-block">
+          <div class="question-header">
+            <strong>Q${idx + 1}. ${q.question_text}</strong>
+            <span class="marks">(${score} / ${q.points} Marks)</span>
+          </div>
+          ${optionsHtml}
+          <div class="answer-section">
+            <div class="section-title">Submitted Answer:</div>
+            <div class="answer-text">${q.question_type === 'MCQ' ? '' : studentAns.replace(/\n/g, '<br/>')}</div>
+          </div>
+          ${(includeFeedback && feedback.feedback) ? `
+            <div class="feedback-section">
+              <div class="section-title">AI Evaluation & Feedback:</div>
+              <div class="feedback-text">${feedback.feedback}</div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    });
+
+    const docContent = `
+      <html>
+        <head>
+          <title>${testName} - ${studentName}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+            body {
+              font-family: 'Inter', sans-serif;
+              color: #1f2937;
+              padding: 2rem;
+              line-height: 1.5;
+            }
+            .header-container {
+              display: flex;
+              justify-content: space-between;
+              border-bottom: 2px solid #e5e7eb;
+              padding-bottom: 1.5rem;
+              margin-bottom: 2rem;
+            }
+            .title-section {
+              text-align: center;
+              flex-grow: 1;
+            }
+            .title-section h1 {
+              font-size: 1.5rem;
+              font-weight: 800;
+              margin: 0;
+              color: #111827;
+            }
+            .title-section p {
+              margin: 0.25rem 0 0;
+              color: #6b7280;
+              font-size: 0.875rem;
+            }
+            .student-info {
+              text-align: right;
+              font-size: 0.875rem;
+              color: #374151;
+              min-width: 250px;
+            }
+            .student-info div {
+              margin-bottom: 0.25rem;
+            }
+            .student-info strong {
+              color: #111827;
+            }
+            .score-badge {
+              display: inline-block;
+              background: #ecfdf5;
+              color: #065f46;
+              padding: 0.5rem 1rem;
+              border-radius: 9999px;
+              font-weight: 700;
+              font-size: 1.1rem;
+              margin-top: 1rem;
+              border: 1px solid #a7f3d0;
+            }
+            .question-block {
+              margin-bottom: 2.5rem;
+              page-break-inside: avoid;
+              border: 1px solid #e5e7eb;
+              border-radius: 8px;
+              padding: 1.5rem;
+              background: #f9fafb;
+            }
+            .question-header {
+              display: flex;
+              justify-content: space-between;
+              font-size: 1.1rem;
+              color: #111827;
+              border-bottom: 1px solid #e5e7eb;
+              padding-bottom: 0.75rem;
+              margin-bottom: 1rem;
+            }
+            .marks {
+              font-weight: 600;
+              color: #4f46e5;
+            }
+            .options {
+              display: grid;
+              gap: 0.5rem;
+              margin-bottom: 1rem;
+            }
+            .option {
+              padding: 0.5rem 0.75rem;
+              border: 1px solid #e5e7eb;
+              border-radius: 6px;
+              background: white;
+            }
+            .option.selected {
+              border-color: #4f46e5;
+              background: #f5f3ff;
+            }
+            .answer-section, .feedback-section {
+              margin-top: 1rem;
+            }
+            .section-title {
+              font-weight: 600;
+              font-size: 0.875rem;
+              color: #4b5563;
+              margin-bottom: 0.25rem;
+            }
+            .answer-text {
+              background: white;
+              border: 1px solid #d1d5db;
+              border-radius: 6px;
+              padding: 0.75rem 1rem;
+              font-size: 0.95rem;
+              min-height: 50px;
+              white-space: pre-wrap;
+            }
+            .feedback-text {
+              background: #f3f4f6;
+              border-left: 4px solid #9ca3af;
+              padding: 0.75rem 1rem;
+              font-size: 0.9rem;
+              color: #4b5563;
+              font-style: italic;
+            }
+            @media print {
+              body {
+                padding: 0;
+              }
+              .question-block {
+                border: none;
+                background: none;
+                padding: 0;
+                margin-bottom: 2rem;
+              }
+              .answer-text {
+                border: 1px solid #e5e7eb;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header-container">
+            <div style="width: 250px;"></div>
+            <div class="title-section">
+              <h1>${testName}</h1>
+              <p>Answer Sheet & Evaluation Report</p>
+              <div class="score-badge">Total Score: ${attempt.score} / ${attempt.max_score}</div>
+            </div>
+            <div class="student-info">
+              <div>Student Name: <strong>${studentName}</strong></div>
+              <div>Register Number: <strong>${regNo}</strong></div>
+              <div>Submit Time: <strong>${new Date(attempt.submit_time || attempt.start_time).toLocaleString()}</strong></div>
+            </div>
+          </div>
+          <div class="questions-container">
+            ${questionsHtml}
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(docContent);
+    printWindow.document.close();
   };
 
   const formatTime = (seconds) => {
@@ -807,8 +1479,34 @@ export default function AdvancedQuizPage() {
         {phase === 'view' && (
           <div className="animate-fade-in">
             
+            {/* Back button */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <button 
+                onClick={() => router.back()} 
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  color: 'var(--color-primary)', 
+                  cursor: 'pointer', 
+                  fontWeight: 'bold', 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '0.4rem',
+                  fontSize: '0.95rem',
+                  padding: 0
+                }}
+              >
+                ← Go Back to Classroom
+              </button>
+            </div>
+            
             {/* Banner card */}
             <div className="glass card" style={{ padding: '2rem', marginBottom: '2rem' }}>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 650 }}>
+                👥 {totalClassroomStudents > 0 
+                  ? `${completedStudentsCount} / ${totalClassroomStudents} students completed this test`
+                  : `${completedStudentsCount} ${completedStudentsCount === 1 ? 'student' : 'students'} completed this test`}
+              </div>
               <span className="badge badge-student" style={{ marginBottom: '0.5rem', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--color-primary)' }}>
                 {quiz.type || 'Academic Test'}
               </span>
@@ -816,10 +1514,17 @@ export default function AdvancedQuizPage() {
               <p style={{ color: 'var(--text-secondary)', marginTop: '0.4rem' }}>{quiz.description || 'Practice test covering class materials.'}</p>
               
               <div style={{ display: 'flex', gap: '2rem', marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', flexWrap: 'wrap' }}>
-                <div>
-                  <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)' }}>DURATION</span>
-                  <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{quiz.duration_minutes} Minutes</span>
-                </div>
+                {!quiz.scheduled_start ? (
+                  <div>
+                    <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)' }}>DURATION</span>
+                    <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{quiz.duration_minutes} Minutes</span>
+                  </div>
+                ) : (
+                  <div>
+                    <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)' }}>DURATION</span>
+                    <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)' }}>Scheduled Session</span>
+                  </div>
+                )}
                 <div>
                   <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)' }}>TOTAL SCORE</span>
                   <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{quiz.max_marks} Marks</span>
@@ -860,14 +1565,42 @@ export default function AdvancedQuizPage() {
                 )}
 
                 {/* Begin button / past attempt status */}
-                {(!guestAttempted && (!pastAttempt || isTeacher)) ? (
+                {(!guestAttempted && (!pastAttempt || pastAttempt.violation_reason === 'IN_PROGRESS' || isTeacher)) ? (
                   <div className="glass card" style={{ padding: '2rem', textAlign: 'center' }}>
-                    <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
-                      Ready to start? Once you click the button, the exam enters full-screen. Navigating away, switching tabs, right-clicking, or copying text will trigger warnings and automatic exit.
-                    </p>
-                    <button onClick={handleStartQuiz} className="btn btn-primary" style={{ padding: '0.8rem 3rem', fontSize: '1rem' }}>
-                      Start Test Now
-                    </button>
+                    {(() => {
+                      const schedule = getScheduleStatus();
+                      const restricted = !isClassCreator && !isTeacher && !schedule.isAccessible;
+                      return (
+                        <>
+                          <p style={{ color: restricted ? '#b91c1c' : 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.95rem', fontWeight: restricted ? 'bold' : 'normal' }}>
+                            {restricted 
+                              ? `⚠️ ${schedule.message}`
+                              : pastAttempt?.violation_reason === 'IN_PROGRESS'
+                                ? "You have an ongoing attempt for this test. You can resume and continue from where you left off."
+                                : "Ready to start? Once you click the button, the exam enters full-screen. Navigating away, switching tabs, right-clicking, or copying text will trigger warnings and automatic exit."}
+                          </p>
+                          {quiz?.scheduled_start && (
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+                              🗓️ Scheduled: {new Date(quiz.scheduled_start).toLocaleString()} to {quiz.scheduled_end ? new Date(quiz.scheduled_end).toLocaleString() : 'Open-Ended'}
+                            </p>
+                          )}
+                          <button 
+                            onClick={handleStartQuizClick} 
+                            className="btn btn-primary" 
+                            disabled={restricted}
+                            style={{ 
+                              padding: '1.1rem 3.5rem', 
+                              fontSize: '1.2rem', 
+                              fontWeight: 'bold',
+                              opacity: restricted ? 0.5 : 1,
+                              cursor: restricted ? 'not-allowed' : 'pointer'
+                            }}
+                          >
+                            {pastAttempt?.violation_reason === 'IN_PROGRESS' ? "Resume Test Now" : "Start Test Now"}
+                          </button>
+                        </>
+                      );
+                    })()}
                   </div>
                 ) : (
                   !isTeacher && (
@@ -878,7 +1611,11 @@ export default function AdvancedQuizPage() {
                         You have submitted your answers for this evaluation.
                       </p>
                       {pastAttempt && (
-                        <button onClick={() => showPastAttemptDetails(pastAttempt)} className="btn btn-secondary">
+                        <button 
+                          onClick={() => showPastAttemptDetails(pastAttempt)} 
+                          className="btn btn-secondary"
+                          style={{ padding: '0.9rem 2.5rem', fontSize: '1.05rem', fontWeight: 'bold' }}
+                        >
                           View Grade & AI Feedback ({pastAttempt.score}/{pastAttempt.max_score})
                         </button>
                       )}
@@ -891,52 +1628,82 @@ export default function AdvancedQuizPage() {
                   <div style={{ marginTop: '2rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                       <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>📥 Student Test Submissions</h3>
-                      <button
-                        onClick={handleDownloadQuizExcel}
-                        className="btn btn-secondary"
-                        style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}
-                      >
-                        📊 Export Test Grades
-                      </button>
-                    </div>
-                    {allAttemptsList.length === 0 ? (
-                      <div className="glass card" style={{ color: 'var(--text-secondary)' }}>No student submissions recorded for this test yet.</div>
-                    ) : (
-                      <div style={{ display: 'grid', gap: '0.8rem' }}>
-                        {allAttemptsList.map((att) => (
-                          <div key={att.id} className="glass card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem' }}>
-                            <div>
-                              <h4 style={{ fontWeight: 700, fontSize: '1rem' }}>
-                                {att.users?.name || att.guest_name || 'Guest User'}
-                              </h4>
-                              {att.violation_reason ? (
-                                <span className="badge badge-student" style={{ background: 'rgba(239,68,68,0.1)', color: '#b91c1c', fontSize: '0.65rem' }}>
-                                  Violated: {att.violation_reason}
-                                </span>
-                              ) : (
-                                <span className="badge badge-student" style={{ background: 'rgba(16,185,129,0.1)', color: '#047857', fontSize: '0.65rem' }}>
-                                  Completed
-                                </span>
-                              )}
-                              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                Submitted: {new Date(att.submit_time).toLocaleString()}
-                              </p>
-                            </div>
-                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                              <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
-                                {att.score}/{att.max_score}
-                              </span>
-                              <button onClick={() => showPastAttemptDetails(att)} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}>
-                                Details
-                              </button>
-                              <button onClick={() => handleDeleteAttempt(att.id)} className="btn btn-danger" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}>
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                          Attended: {(() => {
+                            const completedAttempts = allAttemptsList.filter(att => att.violation_reason !== 'IN_PROGRESS');
+                            const uniqueStudentIds = new Set();
+                            completedAttempts.forEach(att => {
+                              if (att.student_id) {
+                                uniqueStudentIds.add(att.student_id);
+                              } else if (att.guest_name) {
+                                uniqueStudentIds.add(att.guest_name);
+                              }
+                            });
+                            return uniqueStudentIds.size;
+                          })()} {totalClassroomStudents > 0 ? `of ${totalClassroomStudents} students` : 'students'}
+                        </span>
+                        <button
+                          onClick={handleDownloadQuizExcel}
+                          className="btn btn-secondary"
+                          style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}
+                        >
+                          📊 Export Test Grades
+                        </button>
                       </div>
-                    )}
+                    </div>
+                    {(() => {
+                      const completedAttempts = allAttemptsList.filter(att => att.violation_reason !== 'IN_PROGRESS');
+                      if (completedAttempts.length === 0) {
+                        return <div className="glass card" style={{ color: 'var(--text-secondary)' }}>No student submissions recorded for this test yet.</div>;
+                      }
+                      return (
+                        <div style={{ display: 'grid', gap: '0.8rem' }}>
+                          {completedAttempts.map((att) => (
+                            <div key={att.id} className="glass card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem' }}>
+                              <div>
+                                <h4 style={{ fontWeight: 700, fontSize: '1rem' }}>
+                                  {att.users?.name || att.guest_name || 'Guest User'}
+                                </h4>
+                                {att.violation_reason ? (
+                                  <span className="badge badge-student" style={{ background: 'rgba(239,68,68,0.1)', color: '#b91c1c', fontSize: '0.65rem' }}>
+                                    Terminated: {att.violation_reason}
+                                  </span>
+                                ) : (
+                                  <span className="badge badge-student" style={{ background: 'rgba(16,185,129,0.1)', color: '#047857', fontSize: '0.65rem' }}>
+                                    Completed
+                                  </span>
+                                )}
+                                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  Submitted/Last Saved: {new Date(att.submit_time || att.start_time).toLocaleString()}
+                                </p>
+                              </div>
+                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 700, color: 'var(--color-primary)', marginRight: '0.5rem' }}>
+                                  {att.score}/{att.max_score}
+                                </span>
+                                <button onClick={() => showPastAttemptDetails(att)} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}>
+                                  Details
+                                </button>
+                                <button onClick={() => handleDownloadPDF(att)} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}>
+                                  📄 PDF
+                                </button>
+                                {isClassCreator && (
+                                  <button onClick={() => handleGrantAccess(att)} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--color-primary)' }}>
+                                    🔓 Grant Continue
+                                  </button>
+                                )}
+                                {isClassCreator && (
+                                  <button onClick={() => handleDeleteAttempt(att.id)} className="btn btn-danger" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}>
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -1047,10 +1814,14 @@ export default function AdvancedQuizPage() {
                           <label className="label">Write your essay / explanation below:</label>
                           <textarea
                             className="input"
-                            style={{ minHeight: '120px', resize: 'vertical' }}
+                            style={{ minHeight: '260px', resize: 'vertical', fontSize: '1rem', lineHeight: '1.5' }}
                             placeholder="Type your answer in detail here..."
                             value={studentAnswers[q.id] || ''}
                             onChange={(e) => handleTextAnswerChange(q.id, e.target.value)}
+                            spellCheck={false}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
                           />
                         </div>
                       )}
@@ -1064,7 +1835,7 @@ export default function AdvancedQuizPage() {
               <button
                 onClick={() => submitQuiz(false, null)}
                 className="btn btn-primary"
-                style={{ width: '100%', padding: '0.8rem', fontSize: '1.1rem' }}
+                style={{ width: '100%', padding: '1.2rem', fontSize: '1.25rem', fontWeight: 'bold' }}
               >
                 Submit Answers for AI Evaluation
               </button>
@@ -1087,6 +1858,15 @@ export default function AdvancedQuizPage() {
                 <span style={{ fontSize: '3.5rem', fontWeight: 900, color: 'var(--success)' }}>
                   {currentAttempt.score}/{currentAttempt.max_score}
                 </span>
+                {isClassCreator && (
+                  <button 
+                    onClick={() => handleEditMarks(currentAttempt)} 
+                    className="btn btn-secondary"
+                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', display: 'block', margin: '0.5rem auto' }}
+                  >
+                    ✏️ Edit Marks
+                  </button>
+                )}
                 {currentAttempt.violation_reason && (
                   <span style={{ display: 'block', fontSize: '0.9rem', color: 'var(--danger)', fontWeight: 700, background: 'rgba(239,68,68,0.08)', padding: '0.5rem', borderRadius: '8px', width: 'fit-content', margin: '0.5rem auto' }}>
                     ⚠️ Exam Auto-Submitted Due To Security Violation: "{currentAttempt.violation_reason}"
@@ -1096,18 +1876,39 @@ export default function AdvancedQuizPage() {
                   <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--danger)', fontWeight: 600 }}>Auto-submitted due to timer expiry</span>
                 )}
               </div>
-              <button 
-                onClick={() => {
-                  if (quiz?.classroom_id) {
-                    router.push(`/classroom/${quiz.classroom_id}`);
-                  } else {
-                    router.push('/');
-                  }
-                }} 
-                className="btn btn-secondary"
-              >
-                Back to Classroom
-              </button>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                <button 
+                  onClick={() => {
+                    if (isTeacher) {
+                      if (typeof window !== 'undefined' && window.history.length > 1) {
+                        window.history.back();
+                      } else {
+                        setPhase('view');
+                        if (typeof window !== 'undefined') {
+                          window.history.replaceState(null, '', '?phase=view');
+                        }
+                      }
+                    } else {
+                      if (quiz?.classroom_id) {
+                        router.push(`/classroom/${quiz.classroom_id}?tab=quizzes`);
+                      } else {
+                        router.push('/');
+                      }
+                    }
+                  }}
+                  className="btn btn-secondary"
+                  style={{ padding: '0.9rem 2rem', fontSize: '1.05rem', fontWeight: 'bold' }}
+                >
+                  Back
+                </button>
+                <button 
+                  onClick={() => handleDownloadPDF(currentAttempt)} 
+                  className="btn btn-primary"
+                  style={{ padding: '0.9rem 2rem', fontSize: '1.05rem', fontWeight: 'bold', background: 'var(--color-primary)' }}
+                >
+                  📄 Download Answer Sheet PDF
+                </button>
+              </div>
             </div>
 
             {/* Question by question feedback list */}
@@ -1127,7 +1928,7 @@ export default function AdvancedQuizPage() {
                     <div style={{ display: 'grid', gap: '1rem', fontSize: '0.9rem' }}>
                       <div>
                         <span style={{ display: 'block', fontWeight: 650, color: 'var(--text-muted)' }}>YOUR SUBMISSION:</span>
-                        <p style={{ color: 'var(--text-primary)', background: '#F8FAFC', padding: '0.6rem 1rem', borderRadius: '8px', marginTop: '0.2rem' }}>
+                        <p style={{ color: 'var(--text-primary)', background: '#F8FAFC', padding: '0.6rem 1rem', borderRadius: '8px', marginTop: '0.2rem', whiteSpace: 'pre-wrap' }}>
                           {f.studentAnswer || '[Empty Response]'}
                         </p>
                       </div>
@@ -1166,42 +1967,281 @@ export default function AdvancedQuizPage() {
 
       {/* --- EXAM SECURITY MODAL OVERLAYS --- */}
 
-      {/* 1. First Warning Modal */}
+      {/* 0. Instructions Modal before starting exam */}
+      {showInstructions && (
+        <div className="modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+        }}>
+          <div className="glass card animate-fade-in" style={{
+            maxWidth: '600px',
+            width: '90%',
+            padding: '2.5rem',
+            textAlign: 'left',
+            boxShadow: 'var(--shadow-lg)',
+            border: '2px solid var(--border-color)',
+            background: '#FFFFFF'
+          }}>
+            <span style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem', textAlign: 'center' }}>📝</span>
+            <h3 style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '1.5rem', textAlign: 'center' }}>
+              Exam Instructions & Integrity Rules
+            </h3>
+            
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '2rem' }}>
+              <p style={{ marginBottom: '1rem' }}>
+                Please read the following instructions carefully. To ensure a fair evaluation, this exam is monitored. The following actions are considered <strong>Security Violations</strong>:
+              </p>
+              
+              <ul style={{ paddingLeft: '1.5rem', marginBottom: '1.5rem', display: 'grid', gap: '0.5rem', listStyleType: 'none' }}>
+                <li>❌ Exiting full-screen mode</li>
+                <li>❌ Switching browser tabs or applications</li>
+                <li>❌ Losing window focus or clicking outside the exam</li>
+                <li>❌ Copy-pasting, dragging, dropping, or auto-filling answers</li>
+                <li>❌ Keyboard shortcuts (Alt, Meta/Win, Ctrl+C, Ctrl+V, Ctrl+X, F12, Inspect Element)</li>
+                <li>❌ Right-clicking to open context menus</li>
+              </ul>
+
+              <div style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', color: '#b91c1c', fontWeight: 600 }}>
+                ⚠️ Violation Policy: You are allowed exactly 4 warnings. On the 5th security violation, your exam will be automatically terminated, and your answers up to that point will be submitted and evaluated.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button 
+                onClick={() => setShowInstructions(false)} 
+                className="btn btn-secondary" 
+                style={{ flex: 1, padding: '1rem', fontSize: '1.1rem', fontWeight: 'bold' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  setShowInstructions(false);
+                  handleStartQuiz();
+                }} 
+                className="btn btn-primary" 
+                style={{ flex: 2, padding: '1rem', fontSize: '1.1rem', fontWeight: 'bold' }}
+              >
+                I Understand, Start Exam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 1. Warning Modal */}
       {showWarningModal && (
         <div id="warningModal" className="modal-overlay">
-          <div className="glass modal-content" style={{ textAlign: 'center' }}>
-            <span style={{ fontSize: '3rem' }}>⚠️</span>
-            <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--warning)', marginTop: '1rem', marginBottom: '0.5rem' }}>
+          <div className="glass modal-content" style={{ textAlign: 'center', maxWidth: '480px', padding: '2.5rem' }}>
+            <span style={{ fontSize: '3.5rem' }}>⚠️</span>
+            <h3 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--warning)', marginTop: '1rem', marginBottom: '0.5rem' }}>
               Secure Exam Warning!
             </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '1.5rem' }}>
-              Violation detected: <strong style={{ color: '#dc2626' }}>{warningViolationType}</strong>. This is your **first warning**. Any further violation will result in immediate automatic submission.
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '1rem' }}>
+              Violation detected: <strong style={{ color: '#dc2626' }}>{warningViolationType}</strong>.
             </p>
-            <button onClick={dismissWarning} className="btn btn-primary" style={{ width: '100%' }}>
+            <p style={{ color: 'var(--text-primary)', fontSize: '1.15rem', fontWeight: 700, marginBottom: '1rem' }}>
+              This is warning {securityViolationCount.current} of 4.
+            </p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '2rem' }}>
+              Reaching 5 violations will trigger immediate automatic submission and termination.
+            </p>
+            <button 
+              onClick={dismissWarning} 
+              className="btn btn-primary" 
+              style={{ width: '100%', padding: '1.1rem', fontSize: '1.25rem', fontWeight: 'bold' }}
+            >
               Okay, return to Exam
             </button>
           </div>
         </div>
       )}
 
-      {/* 2. Second Warning (Violation) Modal */}
-      {showViolationModal && (
-        <div id="violationModal" className="modal-overlay">
-          <div className="glass modal-content" style={{ textAlign: 'center' }}>
-            <span style={{ fontSize: '3rem' }}>🚨</span>
-            <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--danger)', marginTop: '1rem', marginBottom: '0.5rem' }}>
-              Security Violation Registered!
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '0.5rem' }}>
-              You navigated away from the secure exam environment again. This is a **registered violation**.
+      {/* ================= CUSTOM CONFIRM DELETE ATTEMPT ================= */}
+      {deleteTargetId && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="glass modal-content" style={{ maxWidth: '400px', padding: '2rem', textAlign: 'center', background: '#FFFFFF' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.8rem', color: 'var(--text-primary)', fontFamily: 'Fraunces, serif' }}>Delete Record</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '1.75rem' }}>
+              Are you sure you want to delete this student attempt record? This action cannot be undone.
             </p>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
-              One more violation will result in **immediate automatic submission** and exit.
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => setDeleteTargetId(null)} 
+                className="btn btn-secondary" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  const targetId = deleteTargetId;
+                  setDeleteTargetId(null);
+                  await executeDeleteAttempt(targetId);
+                }} 
+                className="btn btn-danger" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= CUSTOM CONFIRM GRANT CONTINUE ACCESS ================= */}
+      {grantAccessTarget && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="glass modal-content" style={{ maxWidth: '400px', padding: '2rem', textAlign: 'center', background: '#FFFFFF' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.8rem', color: 'var(--text-primary)', fontFamily: 'Fraunces, serif' }}>Grant Continue</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '1.75rem' }}>
+              Are you sure you want to allow <strong>{grantAccessTarget.users?.name || grantAccessTarget.guest_name || 'this student'}</strong> to resume and continue their test?
             </p>
-            <button onClick={dismissViolation} className="btn btn-primary" style={{ width: '100%', background: 'var(--danger)' }}>
-              Okay, I understand
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => setGrantAccessTarget(null)} 
+                className="btn btn-secondary" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  const target = grantAccessTarget;
+                  setGrantAccessTarget(null);
+                  await executeGrantAccess(target);
+                }} 
+                className="btn btn-primary" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= CUSTOM EDIT MARKS DIALOG ================= */}
+      {editMarksTarget && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="glass modal-content" style={{ maxWidth: '400px', padding: '2rem', textAlign: 'center', background: '#FFFFFF' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.8rem', color: 'var(--text-primary)', fontFamily: 'Fraunces, serif' }}>✏️ Edit Marks</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+              Enter new score for <strong>{editMarksTarget.users?.name || editMarksTarget.guest_name || 'Student'}</strong> (Max: {editMarksTarget.max_score}):
+            </p>
+            <input 
+              type="number" 
+              className="input" 
+              style={{ marginBottom: '1.5rem', textAlign: 'center', fontSize: '1.1rem', background: '#F1F5F9', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+              value={editMarksValue} 
+              onChange={(e) => setEditMarksValue(e.target.value)} 
+            />
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => setEditMarksTarget(null)} 
+                className="btn btn-secondary" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  const target = editMarksTarget;
+                  const val = editMarksValue;
+                  setEditMarksTarget(null);
+                  await executeEditMarks(target, val);
+                }} 
+                className="btn btn-primary" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= CUSTOM CONFIRM DOWNLOAD PDF OPTIONS ================= */}
+      {pdfConfirmTarget && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="glass modal-content" style={{ maxWidth: '450px', padding: '2rem', textAlign: 'center', background: '#FFFFFF' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.8rem', color: 'var(--text-primary)', fontFamily: 'Fraunces, serif' }}>Download PDF</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '1.75rem' }}>
+              Do you want to include the detailed AI evaluation feedback and marks breakdown in the downloaded PDF sheet?
+            </p>
+            <div style={{ display: 'flex', gap: '0.8rem', justifyContent: 'center', flexDirection: 'column' }}>
+              <button 
+                onClick={() => {
+                  const target = pdfConfirmTarget;
+                  setPdfConfirmTarget(null);
+                  executeDownloadPDF(target, true);
+                }} 
+                className="btn btn-primary" 
+                style={{ padding: '0.75rem 1.5rem', cursor: 'pointer' }}
+              >
+                📄 Yes, include AI feedback
+              </button>
+              <button 
+                onClick={() => {
+                  const target = pdfConfirmTarget;
+                  setPdfConfirmTarget(null);
+                  executeDownloadPDF(target, false);
+                }} 
+                className="btn btn-secondary" 
+                style={{ padding: '0.75rem 1.5rem', cursor: 'pointer' }}
+              >
+                📄 No, questions & answers only
+              </button>
+              <button 
+                onClick={() => setPdfConfirmTarget(null)} 
+                className="btn btn-secondary" 
+                style={{ padding: '0.5rem 1.5rem', cursor: 'pointer', border: 'none', background: 'none', color: 'var(--text-muted)' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= IN-SCREEN CUSTOM TOAST NOTIFICATIONS ================= */}
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          background: 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '12px',
+          padding: '1rem 1.25rem',
+          boxShadow: 'var(--shadow-lg)',
+          zIndex: 9999,
+          maxWidth: '320px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.25rem',
+          textAlign: 'left'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--color-primary)' }}>{toast.title}</span>
+            <button 
+              onClick={() => setToast(null)} 
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', padding: '0 0 0 10px' }}
+            >
+              ✕
             </button>
           </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>{toast.body}</p>
         </div>
       )}
 

@@ -121,7 +121,7 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           onClick={(e) => { e.preventDefault(); router.push('/'); }}
         >
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-          Home (Feed)
+          My Classrooms
         </a>
         <a 
           className={`tab ${pathname === '/dashboard' ? 'active' : ''}`} 
@@ -136,7 +136,7 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           href="#"
           onClick={(e) => { e.preventDefault(); router.push('/search'); }}
         >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           Search
         </a>
         <a 
@@ -144,7 +144,7 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           href="#"
           onClick={(e) => { e.preventDefault(); router.push('/communities'); }}
         >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Communities
         </a>
         <a 
@@ -152,21 +152,11 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           href="#"
           onClick={(e) => { e.preventDefault(); router.push('/chat'); }}
         >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           Chat
         </a>
         
-        {/* Role-Specific Overview Tabs */}
-        {(user.role === 'Faculty' || user.role === 'Administrator') && (
-          <a 
-            className={`tab ${pathname === '/evaluator' ? 'active' : ''}`} 
-            href="#"
-            onClick={(e) => { e.preventDefault(); router.push('/evaluator'); }}
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            AI Evaluator
-          </a>
-        )}
+
 
         {user.role === 'Administrator' && (
           <a 

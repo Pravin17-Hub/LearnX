@@ -31,6 +31,53 @@ export default function ClassroomPage() {
   const [showQuizModal, setShowQuizModal] = useState(false);
   const [showExamModal, setShowExamModal] = useState(false);
 
+  // Edit Exam / Quiz States
+  const [selectedQuizToEdit, setSelectedQuizToEdit] = useState(null);
+  const [editQuizQuestions, setEditQuizQuestions] = useState([]);
+  const [editQuizTitle, setEditQuizTitle] = useState('');
+  const [editQuizDuration, setEditQuizDuration] = useState(30);
+  const [editQuizMaxMarks, setEditQuizMaxMarks] = useState(100);
+  const [editQuizStart, setEditQuizStart] = useState('');
+  const [editQuizEnd, setEditQuizEnd] = useState('');
+  const [editQuizShuffle, setEditQuizShuffle] = useState(false);
+  const [editQuizNegative, setEditQuizNegative] = useState(false);
+  const [showEditQuizModal, setShowEditQuizModal] = useState(false);
+
+  // In-Screen Modal Confirmations & Toasts
+  const [toast, setToast] = useState(null);
+  const [deleteQuizTargetId, setDeleteQuizTargetId] = useState(null);
+  const [deleteThreadTargetId, setDeleteThreadTargetId] = useState(null);
+
+  const triggerToast = (title, body) => {
+    setToast({ title, body });
+    setTimeout(() => {
+      setToast(prev => {
+        if (prev && prev.title === title && prev.body === body) {
+          return null;
+        }
+        return prev;
+      });
+    }, 4000);
+  };
+
+  const updateEditQuestion = (index, key, value) => {
+    setEditQuizQuestions(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [key]: value };
+      return updated;
+    });
+  };
+
+  const updateEditQuestionOption = (qIndex, optIndex, value) => {
+    setEditQuizQuestions(prev => {
+      const updated = [...prev];
+      const opts = [...(updated[qIndex].options || [])];
+      opts[optIndex] = value;
+      updated[qIndex] = { ...updated[qIndex], options: opts };
+      return updated;
+    });
+  };
+
   // Form states
   const [assignTitle, setAssignTitle] = useState('');
   const [assignDesc, setAssignDesc] = useState('');
@@ -53,8 +100,10 @@ export default function ClassroomPage() {
   const [quizTitle, setQuizTitle] = useState('');
   const [quizDuration, setQuizDuration] = useState(30);
   const [quizNegative, setQuizNegative] = useState(false);
-  const [quizIsPublic, setQuizIsPublic] = useState(false);
+  const [quizShuffle, setQuizShuffle] = useState(false);
   const [quizDesc, setQuizDesc] = useState('');
+  const [quizScheduledStart, setQuizScheduledStart] = useState('');
+  const [quizScheduledEnd, setQuizScheduledEnd] = useState('');
   const [quizQuestions, setQuizQuestions] = useState([]);
   const [myAttempts, setMyAttempts] = useState([]);
 
@@ -64,6 +113,38 @@ export default function ClassroomPage() {
     if (!classroomId) return;
     fetchClassroomData();
   }, [classroomId]);
+
+  // Sync activeTab with URL query parameter to simulate separate pages
+  useEffect(() => {
+    const handlePop = () => {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const urlTab = params.get('tab') || 'assignments';
+        setActiveTab(urlTab);
+      }
+    };
+    window.addEventListener('popstate', handlePop);
+    
+    // Initial load tab selection
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlTab = params.get('tab');
+      if (urlTab) {
+        setActiveTab(urlTab);
+      }
+    }
+
+    return () => window.removeEventListener('popstate', handlePop);
+  }, []);
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      params.set('tab', tab);
+      window.history.pushState(null, '', `?${params.toString()}`);
+    }
+  };
 
   const fetchClassroomData = async () => {
     setLoading(true);
@@ -290,8 +371,10 @@ export default function ClassroomPage() {
     setQuizTitle('');
     setQuizDuration(30);
     setQuizNegative(false);
-    setQuizIsPublic(false);
+    setQuizShuffle(false);
     setQuizDesc('');
+    setQuizScheduledStart('');
+    setQuizScheduledEnd('');
     setQuizQuestions([{
       question_text: '',
       question_type: 'MCQ',
@@ -306,8 +389,10 @@ export default function ClassroomPage() {
     setQuizTitle('');
     setQuizDuration(90);
     setQuizNegative(false);
-    setQuizIsPublic(false);
+    setQuizShuffle(false);
     setQuizDesc('');
+    setQuizScheduledStart('');
+    setQuizScheduledEnd('');
     setQuizQuestions([{
       question_text: '',
       question_type: 'MCQ',
@@ -364,12 +449,14 @@ export default function ClassroomPage() {
           title: quizTitle,
           description: quizDesc,
           duration_minutes: Number(quizDuration),
-          shuffle_questions: false,
+          shuffle_questions: quizShuffle,
           negative_marking: quizNegative,
           max_marks: finalMaxMarks,
           creator_id: user.id,
-          is_public: quizIsPublic,
-          type: testType
+          is_public: false,
+          type: testType,
+          scheduled_start: quizScheduledStart ? new Date(quizScheduledStart).toISOString() : null,
+          scheduled_end: quizScheduledEnd ? new Date(quizScheduledEnd).toISOString() : null
         })
         .select()
         .single();
@@ -410,9 +497,12 @@ export default function ClassroomPage() {
     }
   };
 
-  const handleDeleteQuiz = async (id, e) => {
+  const handleDeleteQuiz = (id, e) => {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this test and all student attempt history? This cannot be undone.')) return;
+    setDeleteQuizTargetId(id);
+  };
+
+  const executeDeleteQuiz = async (id) => {
     try {
       const { error } = await supabase
         .from('quizzes')
@@ -421,8 +511,125 @@ export default function ClassroomPage() {
 
       if (error) throw error;
       setQuizzes(quizzes.filter(q => q.id !== id));
+      triggerToast('Success', 'Quiz deleted successfully.');
     } catch (err) {
-      alert(`Delete failed: ${err.message}`);
+      triggerToast('Delete failed', err.message);
+    }
+  };
+
+  const handleDeleteThread = (threadId) => {
+    setDeleteThreadTargetId(threadId);
+  };
+
+  const executeDeleteThread = async (threadId) => {
+    try {
+      const { error } = await supabase
+        .from('discussion_threads')
+        .delete()
+        .eq('id', threadId);
+      if (error) throw error;
+      setThreads(prev => prev.filter(t => t.id !== threadId));
+      triggerToast('Success', 'Discussion thread deleted.');
+    } catch (err) {
+      triggerToast('Delete failed', err.message);
+    }
+  };
+
+  const handleEditQuizClick = async (quizItem, e) => {
+    e.stopPropagation();
+    setSelectedQuizToEdit(quizItem);
+    try {
+      const { data: qns, error } = await supabase
+        .from('quiz_questions')
+        .select('*')
+        .eq('quiz_id', quizItem.id)
+        .order('id', { ascending: true });
+      if (error) throw error;
+
+      const mappedQns = (qns || []).map(q => {
+        let opts = [];
+        try {
+          opts = JSON.parse(q.options_json || '[]');
+        } catch (e) {
+          opts = [];
+        }
+        let correctIdx = 0;
+        try {
+          const arr = JSON.parse(q.correct_answer_json || '[]');
+          correctIdx = arr[0] || 0;
+        } catch (e) {
+          correctIdx = q.correct_answer_json || 0;
+        }
+        return {
+          ...q,
+          options: opts,
+          correct_answer: correctIdx
+        };
+      });
+
+      setEditQuizQuestions(mappedQns);
+      setEditQuizTitle(quizItem.title);
+      setEditQuizDuration(quizItem.duration_minutes);
+      setEditQuizMaxMarks(quizItem.max_marks || 0);
+      setEditQuizStart(quizItem.scheduled_start || '');
+      setEditQuizEnd(quizItem.scheduled_end || '');
+      setEditQuizShuffle(quizItem.shuffle_questions || false);
+      setEditQuizNegative(quizItem.negative_marking || false);
+      setShowEditQuizModal(true);
+    } catch (err) {
+      triggerToast('Failed to load quiz details', err.message);
+    }
+  };
+
+  const handleSaveEditQuiz = async () => {
+    try {
+      const { error: quizUpdateError } = await supabase
+        .from('quizzes')
+        .update({
+          title: editQuizTitle,
+          duration_minutes: parseInt(editQuizDuration, 10),
+          max_marks: parseInt(editQuizMaxMarks, 10),
+          scheduled_start: editQuizStart || null,
+          scheduled_end: editQuizEnd || null,
+          shuffle_questions: editQuizShuffle,
+          negative_marking: editQuizNegative
+        })
+        .eq('id', selectedQuizToEdit.id);
+
+      if (quizUpdateError) throw quizUpdateError;
+
+      // Update questions
+      for (const q of editQuizQuestions) {
+        const { error: qUpdateError } = await supabase
+          .from('quiz_questions')
+          .update({
+            question_text: q.question_text,
+            question_type: q.question_type,
+            points: parseInt(q.points, 10),
+            options_json: q.question_type === 'MCQ' ? JSON.stringify(q.options) : '[]',
+            correct_answer_json: q.question_type === 'MCQ' ? JSON.stringify([parseInt(q.correct_answer, 10)]) : q.correct_answer_json
+          })
+          .eq('id', q.id);
+
+        if (qUpdateError) throw qUpdateError;
+      }
+
+      // Update local state quizzes list
+      setQuizzes(prev => prev.map(q => q.id === selectedQuizToEdit.id ? {
+        ...q,
+        title: editQuizTitle,
+        duration_minutes: parseInt(editQuizDuration, 10),
+        max_marks: parseInt(editQuizMaxMarks, 10),
+        scheduled_start: editQuizStart || null,
+        scheduled_end: editQuizEnd || null,
+        shuffle_questions: editQuizShuffle,
+        negative_marking: editQuizNegative
+      } : q));
+
+      setShowEditQuizModal(false);
+      triggerToast('Success', 'Exam updated successfully!');
+    } catch (err) {
+      triggerToast('Error updating exam', err.message);
     }
   };
 
@@ -443,6 +650,10 @@ export default function ClassroomPage() {
   }
 
   const isTeacher = user?.role === 'Faculty' || user?.role === 'Administrator' || classroom.creator_id === user?.id;
+  const isClassCreator = user?.role === 'Administrator' || classroom.creator_id === user?.id;
+
+  const facultyCount = members.filter(m => m.users?.role === 'Faculty' || m.users?.role === 'Administrator').length;
+  const studentCount = members.filter(m => m.users?.role === 'Student' || m.users?.role === 'Teaching Assistant' || m.users?.role === 'Research Scholar' || m.users?.role === 'Mentor').length;
 
   return (
     <div>
@@ -467,11 +678,20 @@ export default function ClassroomPage() {
         </div>
 
         {/* Classroom Tab Navigation */}
-        <div className="tabs-container" style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '2.0rem', gap: '2rem' }}>
+        <div className="tabs-container" style={{ 
+          display: 'flex', 
+          borderBottom: '1px solid var(--border-color)', 
+          marginBottom: '2.0rem', 
+          gap: '2rem',
+          overflowX: 'auto',
+          whiteSpace: 'nowrap',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none'
+        }}>
           {['assignments', 'quizzes', 'materials', 'members'].map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => handleTabChange(tab)}
               style={{
                 background: 'none',
                 border: 'none',
@@ -482,7 +702,8 @@ export default function ClassroomPage() {
                 fontSize: '1rem',
                 cursor: 'pointer',
                 textTransform: 'capitalize',
-                transition: 'var(--transition)'
+                transition: 'var(--transition)',
+                flexShrink: 0
               }}
             >
               {tab === 'quizzes' ? 'Quizzes & Exams' : tab}
@@ -582,15 +803,39 @@ export default function ClassroomPage() {
                         </p>
                       </div>
                       
-                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                        <button className="btn btn-primary" style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <button 
+                          onClick={() => {
+                            if (isTeacher) {
+                              router.push(`/quiz/${q.id}?phase=view`);
+                            } else {
+                              const hasTaken = myAttempts.some(att => att.quiz_id === q.id);
+                              if (hasTaken) {
+                                router.push(`/quiz/${q.id}?phase=result`);
+                              } else {
+                                router.push(`/quiz/${q.id}`);
+                              }
+                            }
+                          }}
+                          className="btn btn-primary" 
+                          style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}
+                        >
                           {isTeacher 
                             ? 'View attempts' 
                             : myAttempts.some(att => att.quiz_id === q.id)
                               ? 'View Result'
                               : 'Begin Test'}
                         </button>
-                        {isTeacher && (
+                        {isClassCreator && (
+                          <button
+                            onClick={(e) => handleEditQuizClick(q, e)}
+                            className="btn btn-secondary"
+                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--color-primary)', border: '1px solid rgba(99, 102, 241, 0.15)' }}
+                          >
+                            ✏️ Edit
+                          </button>
+                        )}
+                        {isClassCreator && (
                           <button
                             onClick={(e) => handleDeleteQuiz(q.id, e)}
                             className="btn btn-danger"
@@ -666,18 +911,29 @@ export default function ClassroomPage() {
                       className="glass card"
                       style={{ padding: '1.5rem' }}
                     >
-                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '0.8rem' }}>
-                        <img
-                          src={thread.is_anonymous ? '/assets/images/default-avatar.png' : thread.users?.avatar_path || '/assets/images/default-avatar.png'}
-                          alt="avatar"
-                          style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
-                        />
-                        <div>
-                          <span style={{ fontWeight: 650, color: 'var(--text-primary)' }}>{thread.is_anonymous ? 'Anonymous' : thread.users?.name}</span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
-                            {new Date(thread.created_at).toLocaleDateString()}
-                          </span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.8rem' }}>
+                        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                          <img
+                            src={thread.is_anonymous ? '/assets/images/default-avatar.png' : thread.users?.avatar_path || '/assets/images/default-avatar.png'}
+                            alt="avatar"
+                            style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                          />
+                          <div>
+                            <span style={{ fontWeight: 650, color: 'var(--text-primary)' }}>{thread.is_anonymous ? 'Anonymous' : thread.users?.name}</span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                              {new Date(thread.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
                         </div>
+                        {user && (thread.user_id === user.id || isTeacher) && (
+                          <button
+                            onClick={() => handleDeleteThread(thread.id)}
+                            className="btn btn-danger"
+                            style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                       <h4 style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>{thread.title}</h4>
                       <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{thread.content}</p>
@@ -691,7 +947,13 @@ export default function ClassroomPage() {
           {/* 5. Members Tab */}
           {activeTab === 'members' && (
             <div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem' }}>Class Members</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Class Members</h3>
+                <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                  <span>👨‍🏫 <strong>{facultyCount}</strong> Faculty</span>
+                  <span>👨‍🎓 <strong>{studentCount}</strong> Students</span>
+                </div>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
                 {members.map((member) => (
                   <div key={member.user_id} className="glass card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem' }}>
@@ -960,6 +1222,27 @@ export default function ClassroomPage() {
                 </div>
               </div>
 
+              <div className="row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div className="input-group">
+                  <label className="label">Scheduled Start Time (Optional)</label>
+                  <input
+                    type="datetime-local"
+                    className="input"
+                    value={quizScheduledStart}
+                    onChange={(e) => setQuizScheduledStart(e.target.value)}
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="label">Scheduled End Time (Optional)</label>
+                  <input
+                    type="datetime-local"
+                    className="input"
+                    value={quizScheduledEnd}
+                    onChange={(e) => setQuizScheduledEnd(e.target.value)}
+                  />
+                </div>
+              </div>
+
               <div className="input-group" style={{ display: 'flex', gap: '1.5rem', marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <input
@@ -973,11 +1256,11 @@ export default function ClassroomPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <input
                     type="checkbox"
-                    id="isPublicQuiz"
-                    checked={quizIsPublic}
-                    onChange={(e) => setQuizIsPublic(e.target.checked)}
+                    id="shuffleQuiz"
+                    checked={quizShuffle}
+                    onChange={(e) => setQuizShuffle(e.target.checked)}
                   />
-                  <label htmlFor="isPublicQuiz" className="label" style={{ margin: 0, cursor: 'pointer' }}>Public (Shareable link)</label>
+                  <label htmlFor="shuffleQuiz" className="label" style={{ margin: 0, cursor: 'pointer' }}>Shuffle Questions</label>
                 </div>
               </div>
 
@@ -1111,6 +1394,27 @@ export default function ClassroomPage() {
                 </div>
               </div>
 
+              <div className="row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div className="input-group">
+                  <label className="label">Scheduled Start Time (Optional)</label>
+                  <input
+                    type="datetime-local"
+                    className="input"
+                    value={quizScheduledStart}
+                    onChange={(e) => setQuizScheduledStart(e.target.value)}
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="label">Scheduled End Time (Optional)</label>
+                  <input
+                    type="datetime-local"
+                    className="input"
+                    value={quizScheduledEnd}
+                    onChange={(e) => setQuizScheduledEnd(e.target.value)}
+                  />
+                </div>
+              </div>
+
               <div className="input-group" style={{ display: 'flex', gap: '1.5rem', marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <input
@@ -1124,11 +1428,11 @@ export default function ClassroomPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <input
                     type="checkbox"
-                    id="isPublicExam"
-                    checked={quizIsPublic}
-                    onChange={(e) => setQuizIsPublic(e.target.checked)}
+                    id="shuffleExam"
+                    checked={quizShuffle}
+                    onChange={(e) => setQuizShuffle(e.target.checked)}
                   />
-                  <label htmlFor="isPublicExam" className="label" style={{ margin: 0, cursor: 'pointer' }}>Public (Shareable link)</label>
+                  <label htmlFor="shuffleExam" className="label" style={{ margin: 0, cursor: 'pointer' }}>Shuffle Questions</label>
                 </div>
               </div>
 
@@ -1270,7 +1574,263 @@ export default function ClassroomPage() {
           </div>
         )}
 
-      </div>
+      {/* ================= EDIT EXAM MODAL ================= */}
+      {showEditQuizModal && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="glass modal-content" style={{ maxWidth: '750px', maxHeight: '90vh', overflowY: 'auto', background: '#FFFFFF', padding: '2rem' }}>
+            <h3 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1.5rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', fontFamily: 'Fraunces, serif' }}>
+              ✏️ Edit Exam Settings & Questions
+            </h3>
+
+            {/* Part 1: General Exam Settings */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem', textAlign: 'left' }}>
+              <div>
+                <label className="label">Exam Title</label>
+                <input 
+                  type="text" 
+                  className="input" 
+                  value={editQuizTitle} 
+                  onChange={(e) => setEditQuizTitle(e.target.value)} 
+                />
+              </div>
+              <div>
+                <label className="label">Duration (Minutes)</label>
+                <input 
+                  type="number" 
+                  className="input" 
+                  value={editQuizDuration} 
+                  onChange={(e) => setEditQuizDuration(e.target.value)} 
+                />
+              </div>
+              <div>
+                <label className="label">Maximum Marks</label>
+                <input 
+                  type="number" 
+                  className="input" 
+                  value={editQuizMaxMarks} 
+                  onChange={(e) => setEditQuizMaxMarks(e.target.value)} 
+                />
+              </div>
+              <div>
+                <label className="label">Shuffled Questions</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={editQuizShuffle} 
+                    onChange={(e) => setEditQuizShuffle(e.target.checked)} 
+                  />
+                  <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Enable Question Shuffling</span>
+                </div>
+              </div>
+              <div>
+                <label className="label">Scheduled Start (Optional)</label>
+                <input 
+                  type="datetime-local" 
+                  className="input" 
+                  value={editQuizStart ? editQuizStart.substring(0, 16) : ''} 
+                  onChange={(e) => setEditQuizStart(e.target.value)} 
+                />
+              </div>
+              <div>
+                <label className="label">Scheduled End (Optional)</label>
+                <input 
+                  type="datetime-local" 
+                  className="input" 
+                  value={editQuizEnd ? editQuizEnd.substring(0, 16) : ''} 
+                  onChange={(e) => setEditQuizEnd(e.target.value)} 
+                />
+              </div>
+            </div>
+
+            {/* Part 2: Questions Editor */}
+            <h4 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', color: 'var(--text-primary)', textAlign: 'left' }}>
+              Questions List ({editQuizQuestions.length})
+            </h4>
+            <div style={{ display: 'grid', gap: '1.5rem', marginBottom: '2rem', textAlign: 'left' }}>
+              {editQuizQuestions.map((q, qIndex) => (
+                <div key={q.id} style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem', background: '#F8FAFC' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.8rem' }}>
+                    <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--color-primary)' }}>Question #{qIndex + 1}</span>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Marks:</label>
+                      <input 
+                        type="number" 
+                        style={{ width: '60px', padding: '0.2rem', borderRadius: '4px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+                        value={q.points} 
+                        onChange={(e) => updateEditQuestion(qIndex, 'points', e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <label className="label" style={{ fontSize: '0.8rem' }}>Question Text</label>
+                  <textarea 
+                    className="input"
+                    style={{ minHeight: '60px', resize: 'vertical', fontSize: '0.85rem', marginBottom: '0.8rem' }}
+                    value={q.question_text} 
+                    onChange={(e) => updateEditQuestion(qIndex, 'question_text', e.target.value)}
+                  />
+
+                  {q.question_type === 'MCQ' ? (
+                    <div>
+                      <label className="label" style={{ fontSize: '0.8rem' }}>Options</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.8rem' }}>
+                        {[0, 1, 2, 3].map((optIndex) => (
+                          <div key={optIndex} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{optIndex}:</span>
+                            <input 
+                              type="text" 
+                              className="input"
+                              style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
+                              value={q.options[optIndex] || ''} 
+                              onChange={(e) => updateEditQuestionOption(qIndex, optIndex, e.target.value)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <label className="label" style={{ fontSize: '0.8rem' }}>Correct Option Index</label>
+                      <select 
+                        className="input"
+                        style={{ padding: '0.3rem', fontSize: '0.8rem' }}
+                        value={q.correct_answer}
+                        onChange={(e) => updateEditQuestion(qIndex, 'correct_answer', e.target.value)}
+                      >
+                        {[0, 1, 2, 3].map(i => (
+                          <option key={i} value={i}>Option {i}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="label" style={{ fontSize: '0.8rem' }}>Reference Answer Key (Optional)</label>
+                      <textarea 
+                        className="input"
+                        style={{ minHeight: '50px', resize: 'vertical', fontSize: '0.85rem' }}
+                        value={q.correct_answer_json || ''} 
+                        onChange={(e) => updateEditQuestion(qIndex, 'correct_answer_json', e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
+              <button 
+                onClick={() => setShowEditQuizModal(false)} 
+                className="btn btn-secondary"
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveEditQuiz} 
+                className="btn btn-primary"
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= CUSTOM CONFIRM DELETE QUIZ OVERLAY ================= */}
+      {deleteQuizTargetId && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="glass modal-content" style={{ maxWidth: '400px', padding: '2rem', textAlign: 'center', background: '#FFFFFF' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.8rem', color: 'var(--text-primary)', fontFamily: 'Fraunces, serif' }}>Delete Test</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '1.75rem' }}>
+              Are you sure you want to delete this test and all student attempt history? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => setDeleteQuizTargetId(null)} 
+                className="btn btn-secondary" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  const targetId = deleteQuizTargetId;
+                  setDeleteQuizTargetId(null);
+                  await executeDeleteQuiz(targetId);
+                }} 
+                className="btn btn-danger" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= CUSTOM CONFIRM DELETE THREAD OVERLAY ================= */}
+      {deleteThreadTargetId && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="glass modal-content" style={{ maxWidth: '400px', padding: '2rem', textAlign: 'center', background: '#FFFFFF' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.8rem', color: 'var(--text-primary)', fontFamily: 'Fraunces, serif' }}>Delete Thread</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '1.75rem' }}>
+              Are you sure you want to delete this discussion thread? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => setDeleteThreadTargetId(null)} 
+                className="btn btn-secondary" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  const targetId = deleteThreadTargetId;
+                  setDeleteThreadTargetId(null);
+                  await executeDeleteThread(targetId);
+                }} 
+                className="btn btn-danger" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= IN-SCREEN TOAST ALERTS ================= */}
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          background: 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '12px',
+          padding: '1rem 1.25rem',
+          boxShadow: 'var(--shadow-lg)',
+          zIndex: 9999,
+          maxWidth: '320px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.25rem',
+          textAlign: 'left'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--color-primary)' }}>{toast.title}</span>
+            <button 
+              onClick={() => setToast(null)} 
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', padding: '0 0 0 10px' }}
+            >
+              ✕
+            </button>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>{toast.body}</p>
+        </div>
+      )}
+    </div>
     </div>
   );
 }

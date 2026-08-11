@@ -259,6 +259,37 @@ export default function CommunityRoomPage() {
     return content.replace(/\[FILE:(.*?)\]/, '').trim();
   };
 
+  const renderMessageWithLinks = (content, linkColor = 'var(--color-primary)') => {
+    if (!content) return '';
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+    
+    return parts.map((part, index) => {
+      if (part.startsWith('http://') || part.startsWith('https://')) {
+        return (
+          <a 
+            key={index} 
+            href={part} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            style={{ 
+              color: linkColor, 
+              textDecoration: 'underline', 
+              fontWeight: '700',
+              wordBreak: 'break-all',
+              cursor: 'pointer',
+              position: 'relative',
+              zIndex: 5
+            }}
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
   // Compile list of shared resources
   const sharedResources = chatPosts.filter(p => parseFileRef(p.content) !== null);
 
@@ -402,7 +433,7 @@ export default function CommunityRoomPage() {
                               </span>
                             )}
                             <p style={{ fontSize: '0.9rem', margin: 0, whiteSpace: 'pre-wrap' }}>
-                              {displayContent}
+                              {renderMessageWithLinks(displayContent, isMe ? '#FFFFFF' : 'var(--color-primary)')}
                             </p>
                             {fileUrl && (
                               <div style={{ marginTop: '0.6rem', borderTop: isMe ? '1px solid rgba(255,255,255,0.2)' : '1px solid var(--border-color)', paddingTop: '0.6rem' }}>
