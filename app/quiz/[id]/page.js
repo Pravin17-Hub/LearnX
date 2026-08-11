@@ -104,14 +104,18 @@ export default function AdvancedQuizPage() {
   }, [phase]);
 
   useEffect(() => {
-    const handlePhasePop = () => {
+    const handlePhasePop = (e) => {
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
         const urlPhase = params.get('phase') || 'view';
 
         if (phase === 'playing' && urlPhase !== 'playing') {
           // Block popstate transition away from active exam without confirmation
+          e.stopImmediatePropagation();
+          e.stopPropagation();
+          e.preventDefault();
           window.history.pushState(null, '', '?phase=playing');
+          handleSecurityViolationEvent("browser back button click / navigation swipe");
           return;
         }
 
@@ -131,8 +135,8 @@ export default function AdvancedQuizPage() {
       }
     };
 
-    window.addEventListener('popstate', handlePhasePop);
-    return () => window.removeEventListener('popstate', handlePhasePop);
+    window.addEventListener('popstate', handlePhasePop, true);
+    return () => window.removeEventListener('popstate', handlePhasePop, true);
   }, [phase, allAttemptsList]);
 
   // Main countdown timer
@@ -267,28 +271,34 @@ export default function AdvancedQuizPage() {
     }, 200);
 
     // Swipe down from top edge (to view notifications drawer) detection
-    const handleTouchStart = (ev) => {
-      if (!examStarted.current) return;
-      const touch = ev.touches[0];
-      if (touch.clientY < 25) {
-        topTouchStart.current = touch.clientY;
-      } else {
-        topTouchStart.current = null;
-      }
-    };
+    const lastTouchY = { current: null };
 
     const handleTouchMove = (ev) => {
-      if (!examStarted.current || topTouchStart.current === null) return;
+      if (!examStarted.current) return;
       const touch = ev.touches[0];
-      const diffY = touch.clientY - topTouchStart.current;
-      if (diffY > 20) {
-        topTouchStart.current = null;
+      const currentY = touch.clientY;
+
+      if (lastTouchY.current === null) {
+        lastTouchY.current = currentY;
+        return;
+      }
+
+      const diffY = currentY - lastTouchY.current;
+      lastTouchY.current = currentY;
+
+      // Detect if user is at the top of the page, touches near the top notch, and drags down
+      const isScrollAtTop = typeof window !== 'undefined' ? (window.scrollY || document.documentElement.scrollTop) < 15 : true;
+      if (isScrollAtTop && currentY < 80 && diffY > 15) {
         handleSecurityViolationEvent("swiping status bar / notification drawer");
       }
     };
 
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    const handleTouchEnd = () => {
+      lastTouchY.current = null;
+    };
+
     window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
 
     // 5. requestAnimationFrame suspension check
     let lastFrameTime = Date.now();
@@ -524,8 +534,8 @@ export default function AdvancedQuizPage() {
       });
       clearInterval(textareaPoll);
       clearInterval(mcqVerifyPoll);
-      window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
       domObserver.disconnect();
     };
   }, [phase]);
