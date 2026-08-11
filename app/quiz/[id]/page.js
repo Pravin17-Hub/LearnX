@@ -885,6 +885,16 @@ export default function AdvancedQuizPage() {
           return role !== 'Faculty' && role !== 'Administrator';
         });
         setAllAttemptsList(filteredAttempts);
+
+        // Scan for ungraded terminated attempts and auto-evaluate them in background
+        filteredAttempts.forEach(async (att) => {
+          const isTerminated = att.violation_reason !== 'IN_PROGRESS';
+          const isUngraded = !att.ai_feedback || att.ai_feedback === '{}';
+          if (isTerminated && isUngraded) {
+            console.log(`Auto-evaluating ungraded terminated attempt ${att.id} for student ${att.users?.name}...`);
+            await evaluateAttemptBackground(att);
+          }
+        });
       }
     }
 
@@ -1305,6 +1315,162 @@ export default function AdvancedQuizPage() {
     } finally {
       setSubmitting(false);
       setSubmissionProgress(null);
+    }
+  };
+
+  const evaluateAttemptBackground = async (targetAttempt) => {
+    try {
+      let finalScore = 0;
+      let totalMaxMarks = 0;
+      const feedbackMap = {};
+      
+      let answers = {};
+      try {
+        answers = JSON.parse(targetAttempt.answers_json || '{}');
+      } catch (e) {
+        answers = {};
+      }
+
+      // 1. Grade MCQs locally
+      for (const q of questions) {
+        totalMaxMarks += q.points;
+        const studentAns = answers[q.id] || '';
+
+        const itemFeedback = {
+          questionText: q.question_text,
+          questionType: q.question_type,
+          studentAnswer: studentAns,
+          maxMarks: q.points,
+          score: 0,
+          feedback: '',
+          correct: false
+        };
+
+        if (q.question_type === 'MCQ') {
+          let corrects = [];
+          try {
+            corrects = JSON.parse(q.correct_answer_json || '[]');
+          } catch (e) {
+            corrects = [q.correct_answer_json];
+          }
+
+          if (studentAns.trim() !== '') {
+            const correctIdx = corrects[0];
+            if (studentAns === String(correctIdx)) {
+              finalScore += q.points;
+              itemFeedback.score = q.points;
+              itemFeedback.feedback = 'Correct answer! Maximum marks awarded.';
+              itemFeedback.correct = true;
+            } else {
+              const penalty = quiz?.negative_marking ? (q.negative_points || 0) : 0;
+              finalScore -= penalty;
+              itemFeedback.score = -penalty;
+              itemFeedback.feedback = `Incorrect answer. The correct option was option index ${correctIdx}.`;
+              itemFeedback.correct = false;
+            }
+          } else {
+            itemFeedback.feedback = 'No option selected.';
+          }
+          feedbackMap[q.id] = itemFeedback;
+        }
+      }
+
+      // 2. Grade Theory questions via serverless AI
+      const theoryQuestions = questions.filter(q => q.question_type !== 'MCQ');
+      
+      if (theoryQuestions.length > 0) {
+        for (const q of theoryQuestions) {
+          const studentAns = answers[q.id] || '';
+          const itemFeedback = {
+            questionText: q.question_text,
+            questionType: q.question_type,
+            studentAnswer: studentAns,
+            maxMarks: q.points,
+            score: 0,
+            feedback: '',
+            correct: false
+          };
+
+          if (studentAns.trim() !== '') {
+            try {
+              let refAnswer = q.correct_answer_json;
+              if (!refAnswer || refAnswer.trim() === '' || refAnswer === '[]') {
+                refAnswer = 'A logical and concise academic explanation.';
+              }
+
+              const { data: { session } } = await supabase.auth.getSession();
+              const token = session?.access_token;
+              const authHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+              const res = await fetch('/api/evaluate', {
+                method: 'POST',
+                headers: { 
+                  'Content-Type': 'application/json',
+                  ...authHeaders
+                },
+                body: JSON.stringify({
+                  question: q.question_text,
+                  answerKey: refAnswer,
+                  rubric: 'Assess grammar, reasoning, terminology accuracy, and completion.',
+                  maxMarks: q.points,
+                  studentAnswer: studentAns
+                })
+              });
+
+              if (res.ok) {
+                const aiResult = await res.json();
+                const score = Number(aiResult.score) || 0;
+                finalScore += score;
+                itemFeedback.score = score;
+                itemFeedback.feedback = aiResult.feedback || 'AI evaluated successfully.';
+                itemFeedback.ai_response = aiResult;
+                if (score >= q.points * 0.75) {
+                  itemFeedback.correct = true;
+                }
+              } else {
+                throw new Error('AI service error');
+              }
+            } catch (err) {
+              const fallback = Math.max(1, Math.floor(q.points / 2));
+              finalScore += fallback;
+              itemFeedback.score = fallback;
+              itemFeedback.feedback = 'AI grader was busy. Awarded half-marks for completion.';
+            }
+          } else {
+            itemFeedback.feedback = 'No answer submitted before secure environment termination.';
+          }
+          feedbackMap[q.id] = itemFeedback;
+        }
+      }
+
+      if (finalScore < 0) finalScore = 0;
+
+      // 3. Save Attempt to Supabase
+      const { data: updatedAttempt, error } = await supabase
+        .from('quiz_attempts')
+        .update({
+          score: finalScore,
+          max_score: totalMaxMarks,
+          ai_feedback: JSON.stringify(feedbackMap),
+          submit_time: new Date().toISOString()
+        })
+        .eq('id', targetAttempt.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update local state list so the teacher sees the updated score immediately!
+      setAllAttemptsList(prev => prev.map(a => a.id === targetAttempt.id ? { 
+        ...a, 
+        score: finalScore, 
+        max_score: totalMaxMarks,
+        ai_feedback: JSON.stringify(feedbackMap) 
+      } : a));
+
+      console.log(`Successfully auto-evaluated attempt ${targetAttempt.id}!`);
+    } catch (err) {
+      console.error(`Failed to auto-evaluate attempt ${targetAttempt.id}:`, err);
     }
   };
 
