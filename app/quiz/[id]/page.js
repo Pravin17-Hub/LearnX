@@ -1034,6 +1034,14 @@ export default function AdvancedQuizPage() {
       alert(schedule.message);
       return;
     }
+    
+    // Verify window is maximized/no side panels are active
+    const isMaximized = typeof window !== 'undefined' && (window.innerWidth >= window.screen.width - 80);
+    if (!isMaximized && !isClassCreator && !isTeacher) {
+      alert("Exam Security Alert: Please maximize your browser window and close any side panels before starting the exam.");
+      return;
+    }
+
     try {
       let attempt = activeAttempt;
       
