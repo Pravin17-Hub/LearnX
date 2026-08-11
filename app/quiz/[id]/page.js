@@ -66,6 +66,11 @@ export default function AdvancedQuizPage() {
   };
   const [totalClassroomStudents, setTotalClassroomStudents] = useState(0);
   const [isClassCreator, setIsClassCreator] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const violationProofsRef = useRef([]);
+  const initialWidth = useRef(0);
+  const initialHeight = useRef(0);
 
   const answersRef = useRef({});
   const questionsRef = useRef([]);
@@ -316,7 +321,33 @@ export default function AdvancedQuizPage() {
       if (!document.hasFocus() && !isGracePeriod.current && !isWarningModalOpen.current) {
         handleSecurityViolationEvent("focus loss (detected via periodic focus check)");
       }
+
+      // Periodic Fullscreen Check to prevent escaping fullscreen mode
+      const isFS = document.fullscreenElement || 
+                   document.webkitFullscreenElement || 
+                   document.mozFullScreenElement || 
+                   document.msFullscreenElement;
+      if (!isFS && !isGracePeriod.current && !isWarningModalOpen.current) {
+        handleSecurityViolationEvent("exiting full-screen mode (detected via periodic check)");
+      }
     }, 200);
+
+    // Viewport Resizing / Chrome Side Panel opening detection
+    initialWidth.current = typeof window !== 'undefined' ? window.innerWidth : 0;
+    initialHeight.current = typeof window !== 'undefined' ? window.innerHeight : 0;
+
+    const handleResize = () => {
+      if (!examStarted.current || isGracePeriod.current) return;
+      const diffW = Math.abs(window.innerWidth - initialWidth.current);
+      const diffH = Math.abs(window.innerHeight - initialHeight.current);
+      
+      if (diffW > 15 || diffH > 15) {
+        handleSecurityViolationEvent("resizing browser window / opening side panels");
+        initialWidth.current = window.innerWidth;
+        initialHeight.current = window.innerHeight;
+      }
+    };
+    window.addEventListener('resize', handleResize);
 
     // Swipe down from top edge (to view notifications drawer) detection
     const startTouchY = { current: null };
@@ -618,6 +649,7 @@ export default function AdvancedQuizPage() {
       clearInterval(textareaPoll);
       clearInterval(mcqVerifyPoll);
       clearInterval(overlayPoll);
+      window.removeEventListener('resize', handleResize);
       window.removeEventListener('touchmove', handleTouchMove, { capture: true });
       window.removeEventListener('touchend', handleTouchEnd, { capture: true });
       window.removeEventListener('touchstart', handleTouchStartMulti, { capture: true });
