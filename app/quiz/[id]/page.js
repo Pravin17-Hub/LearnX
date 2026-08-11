@@ -68,6 +68,7 @@ export default function AdvancedQuizPage() {
   const [isClassCreator, setIsClassCreator] = useState(false);
 
   const answersRef = useRef({});
+  const questionsRef = useRef([]);
 
   // --- CHEATING PREVENTION / VIOLATION STATES ---
   const [showWarningModal, setShowWarningModal] = useState(false);
@@ -757,7 +758,7 @@ export default function AdvancedQuizPage() {
     // Fetch Quiz
     const { data: qz } = await supabase
       .from('quizzes')
-      .select('*, classrooms(*, users!creator_id(name))')
+      .select('*, users!creator_id(name), classrooms(*, users!creator_id(name))')
       .eq('id', quizId)
       .single();
     setQuiz(qz);
@@ -790,6 +791,7 @@ export default function AdvancedQuizPage() {
         .select('*')
         .eq('quiz_id', quizId);
       setQuestions(qns || []);
+      questionsRef.current = qns || [];
 
       // Fetch Leaderboard
       const { data: lb } = await supabase
@@ -1136,7 +1138,7 @@ export default function AdvancedQuizPage() {
       const feedbackMap = {};
 
       // 1. Grade MCQs locally
-      for (const q of questions) {
+      for (const q of questionsRef.current) {
         totalMaxMarks += q.points;
         const studentAns = answersRef.current[q.id] || '';
 
@@ -1180,7 +1182,7 @@ export default function AdvancedQuizPage() {
       }
 
       // 2. Grade Theory questions via serverless AI
-      const theoryQuestions = questions.filter(q => q.question_type !== 'MCQ');
+      const theoryQuestions = questionsRef.current.filter(q => q.question_type !== 'MCQ');
       
       if (theoryQuestions.length > 0) {
         setSubmissionProgress('grading_theory');
@@ -1332,7 +1334,7 @@ export default function AdvancedQuizPage() {
       }
 
       // 1. Grade MCQs locally
-      for (const q of questions) {
+      for (const q of questionsRef.current) {
         totalMaxMarks += q.points;
         const studentAns = answers[q.id] || '';
 
@@ -1376,7 +1378,7 @@ export default function AdvancedQuizPage() {
       }
 
       // 2. Grade Theory questions via serverless AI
-      const theoryQuestions = questions.filter(q => q.question_type !== 'MCQ');
+      const theoryQuestions = questionsRef.current.filter(q => q.question_type !== 'MCQ');
       
       if (theoryQuestions.length > 0) {
         for (const q of theoryQuestions) {
@@ -1589,8 +1591,8 @@ export default function AdvancedQuizPage() {
     const studentName = attempt.users?.name || attempt.guest_name || 'Guest Student';
     const regNo = attempt.users?.reg_no || 'N/A';
     const testName = quiz?.title || 'Academic Evaluation';
-    const courseName = quiz?.classrooms?.name || 'N/A';
-    const facultyName = quiz?.classrooms?.users?.name || 'N/A';
+    const courseName = quiz?.classrooms?.class_name || 'N/A';
+    const facultyName = quiz?.classrooms?.users?.name || quiz?.users?.name || 'N/A';
     const testDate = new Date(attempt.submit_time || attempt.start_time).toLocaleDateString();
     
     let parsedFeedback = {};
