@@ -198,14 +198,6 @@ export default function AdvancedQuizPage() {
       isGracePeriod.current = false;
     }, 3000);
 
-    // Browser Back Button & Reload Protection
-    const handlePopState = (e) => {
-      window.history.pushState(null, '', window.location.href);
-      if (confirm("⚠️ WARNING: You are in the middle of an active exam. Going back will terminate and auto-submit your exam. Are you sure you want to go back?")) {
-        submitQuiz(false, "user navigated back from exam");
-      }
-    };
-
     const handleBeforeUnload = (e) => {
       e.preventDefault();
       e.returnValue = "Are you sure you want to leave the exam?";
@@ -213,7 +205,6 @@ export default function AdvancedQuizPage() {
     };
 
     window.history.pushState(null, '', window.location.href);
-    window.addEventListener('popstate', handlePopState);
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     // 1. Fullscreen request
@@ -508,7 +499,6 @@ export default function AdvancedQuizPage() {
     return () => {
       examStarted.current = false;
       clearTimeout(graceTimer);
-      window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
