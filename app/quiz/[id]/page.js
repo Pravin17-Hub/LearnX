@@ -835,6 +835,27 @@ export default function AdvancedQuizPage() {
           } catch (e) {
             setFeedbackDetails({});
           }
+
+          // Check if this was an unapproved exit that needs evaluation
+          const needsEval = past.violation_reason === 'EXAMINATION_TERMINATED_UNAPPROVED_EXIT' && (!past.ai_feedback || past.ai_feedback === '{}');
+          if (needsEval) {
+            setActiveAttempt(past);
+            activeAttemptRef.current = past;
+            let loadedAnswers = {};
+            try {
+              loadedAnswers = JSON.parse(past.answers_json || '{}');
+            } catch (e) {
+              loadedAnswers = {};
+            }
+            setStudentAnswers(loadedAnswers);
+            answersRef.current = loadedAnswers;
+            
+            // Trigger submit and evaluation on the active attempt
+            setLoading(false);
+            submitQuiz(false, 'EXAMINATION_TERMINATED_UNAPPROVED_EXIT');
+            return;
+          }
+
           setPhase('result');
           if (typeof window !== 'undefined') {
             window.history.replaceState(null, '', `?phase=result&attemptId=${past.id}`);
@@ -1220,7 +1241,7 @@ export default function AdvancedQuizPage() {
       setSubmissionProgress('saving');
       
       let attempt = null;
-      if (activeAttempt?.id) {
+      if (activeAttemptRef.current?.id) {
         const { data: updatedAttempt, error: attemptError } = await supabase
           .from('quiz_attempts')
           .update({
@@ -1232,7 +1253,7 @@ export default function AdvancedQuizPage() {
             violation_reason: violationReasonVal,
             submit_time: new Date().toISOString()
           })
-          .eq('id', activeAttempt.id)
+          .eq('id', activeAttemptRef.current.id)
           .select()
           .single();
           
