@@ -911,6 +911,12 @@ nav.tabs {
   nav.tabs, .sidebar-foot {
     display: none;
   }
+  .mobile-hamburger-btn {
+    display: flex !important;
+  }
+  .sidebar-collapse-btn {
+    display: none !important;
+  }
   main {
     padding: 22px 18px 40px !important;
   }

@@ -284,8 +284,8 @@ export default function AssignmentDetailsPage() {
 
     const headers = ['Register Number', 'Student Name', 'Marks Obtained', 'Max Marks', 'AI Score', 'Teacher Override', 'Review Status'];
     const rows = submissionsList.map(sub => [
-      `"\t${sub.users?.reg_no || 'N/A'}"`,
-      `"${sub.users?.name || 'Unknown'}"`,
+      sub.users?.reg_no || 'N/A',
+      sub.users?.name || 'Unknown',
       sub.teacher_marks !== null ? sub.teacher_marks : sub.ai_marks,
       assignment.max_marks,
       sub.ai_marks || 0,
@@ -293,12 +293,40 @@ export default function AssignmentDetailsPage() {
       sub.review_status
     ]);
 
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const htmlContent = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          table { font-size: 8pt; font-family: Arial, sans-serif; border-collapse: collapse; }
+          th, td { border: 0.5pt solid #cccccc; padding: 4px; }
+          th { background-color: #f2f2f2; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <thead>
+            <tr>
+              ${headers.map(h => `<th>${h}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr>
+                ${row.map(cell => `<td>${cell}</td>`).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `${assignment.title.replace(/\s+/g, '_')}_grades.csv`);
+    link.setAttribute('download', `${assignment.title.replace(/\s+/g, '_')}_grades.xls`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

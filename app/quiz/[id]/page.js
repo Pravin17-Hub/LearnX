@@ -232,11 +232,9 @@ export default function AdvancedQuizPage() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const handleWindowBlur = () => {
-      setTimeout(() => {
-        if (!document.hasFocus() && examStarted.current) {
-          handleSecurityViolationEvent("tab switching / focus loss");
-        }
-      }, 250);
+      if (examStarted.current) {
+        handleSecurityViolationEvent("tab switching / focus loss");
+      }
     };
     window.addEventListener('blur', handleWindowBlur);
 
@@ -561,7 +559,7 @@ export default function AdvancedQuizPage() {
 
   const handleDownloadQuizExcel = () => {
     if (!allAttemptsList || allAttemptsList.length === 0) {
-      alert('No student attempts to download.');
+      triggerToast('Notice', 'No student attempts to download.');
       return;
     }
 
@@ -575,19 +573,47 @@ export default function AdvancedQuizPage() {
 
     const headers = ['Register Number', 'Student Name', 'Marks Obtained', 'Max Marks', 'Violation Reason'];
     const rows = completedAttempts.map(att => [
-      `"\t${att.users?.reg_no || 'Guest/N/A'}"`,
-      `"${att.users?.name || att.guest_name || 'Guest User'}"`,
+      att.users?.reg_no || 'Guest/N/A',
+      att.users?.name || att.guest_name || 'Guest User',
       att.score,
       att.max_score || quiz?.max_marks || 0,
-      `"${att.violation_reason || 'None'}"`
+      att.violation_reason || 'None'
     ]);
 
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const htmlContent = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          table { font-size: 8pt; font-family: Arial, sans-serif; border-collapse: collapse; }
+          th, td { border: 0.5pt solid #cccccc; padding: 4px; }
+          th { background-color: #f2f2f2; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <thead>
+            <tr>
+              ${headers.map(h => `<th>${h}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr>
+                ${row.map(cell => `<td>${cell}</td>`).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `${quiz?.title?.replace(/\s+/g, '_') || 'test'}_grades.csv`);
+    link.setAttribute('download', `${quiz?.title?.replace(/\s+/g, '_') || 'test'}_grades.xls`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -612,7 +638,7 @@ export default function AdvancedQuizPage() {
     // Fetch Quiz
     const { data: qz } = await supabase
       .from('quizzes')
-      .select('*, classrooms(creator_id)')
+      .select('*, classrooms(*, users!creator_id(name))')
       .eq('id', quizId)
       .single();
     setQuiz(qz);
@@ -1224,6 +1250,9 @@ export default function AdvancedQuizPage() {
     const studentName = attempt.users?.name || attempt.guest_name || 'Guest Student';
     const regNo = attempt.users?.reg_no || 'N/A';
     const testName = quiz?.title || 'Academic Evaluation';
+    const courseName = quiz?.classrooms?.name || 'N/A';
+    const facultyName = quiz?.classrooms?.users?.name || 'N/A';
+    const testDate = new Date(attempt.submit_time || attempt.start_time).toLocaleDateString();
     
     let parsedFeedback = {};
     try {
@@ -1349,7 +1378,6 @@ export default function AdvancedQuizPage() {
             }
             .question-block {
               margin-bottom: 2.5rem;
-              page-break-inside: avoid;
               border: 1px solid #e5e7eb;
               border-radius: 8px;
               padding: 1.5rem;
@@ -1427,7 +1455,11 @@ export default function AdvancedQuizPage() {
         </head>
         <body>
           <div class="header-container">
-            <div style="width: 250px;"></div>
+            <div style="width: 250px; text-align: left; font-size: 0.875rem; color: #374151;">
+              <div>Course: <strong>${courseName}</strong></div>
+              <div>Faculty: <strong>${facultyName}</strong></div>
+              <div>Date: <strong>${testDate}</strong></div>
+            </div>
             <div class="title-section">
               <h1>${testName}</h1>
               <p>Answer Sheet & Evaluation Report</p>
@@ -1436,7 +1468,7 @@ export default function AdvancedQuizPage() {
             <div class="student-info">
               <div>Student Name: <strong>${studentName}</strong></div>
               <div>Register Number: <strong>${regNo}</strong></div>
-              <div>Submit Time: <strong>${new Date(attempt.submit_time || attempt.start_time).toLocaleString()}</strong></div>
+              <div>Submit Time: <strong>${new Date(attempt.submit_time || attempt.start_time).toLocaleTimeString()}</strong></div>
             </div>
           </div>
           <div class="questions-container">
