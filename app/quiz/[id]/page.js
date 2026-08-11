@@ -347,6 +347,27 @@ export default function AdvancedQuizPage() {
     window.addEventListener('touchmove', handleTouchMove, { capture: true, passive: true });
     window.addEventListener('touchend', handleTouchEnd, { capture: true, passive: true });
 
+    // Multi-finger swipe & gesture blocker (cancels 2, 3, 4 finger swipe actions)
+    const handleTouchStartMulti = (ev) => {
+      if (!examStarted.current) return;
+      if (ev.touches.length >= 2) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        handleSecurityViolationEvent("multi-finger swipe gesture");
+      }
+    };
+
+    const handleTouchMoveMulti = (ev) => {
+      if (!examStarted.current) return;
+      if (ev.touches.length >= 2) {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStartMulti, { capture: true, passive: false });
+    window.addEventListener('touchmove', handleTouchMoveMulti, { capture: true, passive: false });
+
     // 5. requestAnimationFrame suspension check
     let lastFrameTime = Date.now();
     let frameId;
@@ -583,6 +604,8 @@ export default function AdvancedQuizPage() {
       clearInterval(mcqVerifyPoll);
       window.removeEventListener('touchmove', handleTouchMove, { capture: true });
       window.removeEventListener('touchend', handleTouchEnd, { capture: true });
+      window.removeEventListener('touchstart', handleTouchStartMulti, { capture: true });
+      window.removeEventListener('touchmove', handleTouchMoveMulti, { capture: true });
       domObserver.disconnect();
     };
   }, [phase]);
