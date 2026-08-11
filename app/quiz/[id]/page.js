@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 
 export default function AdvancedQuizPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const quizId = params.id;
 
   const [user, setUser] = useState(null);
@@ -84,6 +85,11 @@ export default function AdvancedQuizPage() {
   const topTouchStart = useRef(null);
   const activeAttemptRef = useRef(activeAttempt);
   const textSaveDebounce = useRef(null);
+  const authTokenRef = useRef(null);
+
+  useEffect(() => {
+    activeAttemptRef.current = activeAttempt;
+  }, [activeAttempt]);
 
   useEffect(() => {
     activeAttemptRef.current = activeAttempt;
@@ -108,6 +114,17 @@ export default function AdvancedQuizPage() {
       document.body.style.overscrollBehaviorX = 'auto';
     };
   }, [phase]);
+
+  // Intercept Next.js query navigation POP events dynamically
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlPhase = searchParams?.get('phase') || 'view';
+
+    if (examStarted.current && urlPhase !== 'playing') {
+      window.history.pushState(null, '', '?phase=playing');
+      handleSecurityViolationEvent("browser back button click / navigation swipe");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const handlePhasePop = (e) => {
@@ -216,13 +233,18 @@ export default function AdvancedQuizPage() {
           submit_time: new Date().toISOString()
         };
         
+        const headers = {
+          'Content-Type': 'application/json',
+          'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+          'Prefer': 'return=minimal'
+        };
+        if (authTokenRef.current) {
+          headers['Authorization'] = `Bearer ${authTokenRef.current}`;
+        }
+
         fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/quiz_attempts?id=eq.${activeAttemptRef.current.id}`, {
           method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-            'Prefer': 'return=minimal'
-          },
+          headers: headers,
           body: JSON.stringify(payload),
           keepalive: true
         });
@@ -322,8 +344,8 @@ export default function AdvancedQuizPage() {
       startTouchY.current = null;
     };
 
-    window.addEventListener('touchmove', handleTouchMove, { passive: true });
-    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { capture: true, passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { capture: true, passive: true });
 
     // 5. requestAnimationFrame suspension check
     let lastFrameTime = Date.now();
@@ -559,8 +581,8 @@ export default function AdvancedQuizPage() {
       });
       clearInterval(textareaPoll);
       clearInterval(mcqVerifyPoll);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchmove', handleTouchMove, { capture: true });
+      window.removeEventListener('touchend', handleTouchEnd, { capture: true });
       domObserver.disconnect();
     };
   }, [phase]);
@@ -694,6 +716,9 @@ export default function AdvancedQuizPage() {
   const loadInitialData = async () => {
     setLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      authTokenRef.current = session.access_token;
+    }
     
     let profile = null;
     if (session) {
