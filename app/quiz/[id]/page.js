@@ -545,6 +545,44 @@ export default function AdvancedQuizPage() {
       });
     }, 200);
 
+    // 14. Periodic Overlay Injection Checker (3s)
+    const checkUnauthorizedOverlays = () => {
+      if (!examStarted.current) return;
+      const bodyChildren = Array.from(document.body.children);
+      let foundOverlay = false;
+      
+      for (const node of bodyChildren) {
+        if (
+          node.tagName.toLowerCase() === 'script' ||
+          node.tagName.toLowerCase() === 'style' ||
+          node.id === '__next' ||
+          node.id === 'warningModal' ||
+          node.id === 'violationModal' ||
+          node.className?.includes('toast') ||
+          node.className?.includes('modal')
+        ) {
+          continue;
+        }
+        
+        try {
+          const style = window.getComputedStyle(node);
+          const isFloating = style.position === 'fixed' || style.position === 'absolute';
+          const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity || '1') > 0;
+          
+          if (isFloating && isVisible) {
+            foundOverlay = true;
+            break;
+          }
+        } catch (e) {}
+      }
+      
+      if (foundOverlay) {
+        handleSecurityViolationEvent("unauthorized screen overlay or extension widget detected");
+      }
+    };
+
+    const overlayPoll = setInterval(checkUnauthorizedOverlays, 3000);
+
     // Cleanup all event handlers and intervals
     return () => {
       examStarted.current = false;
@@ -574,6 +612,7 @@ export default function AdvancedQuizPage() {
       });
       clearInterval(textareaPoll);
       clearInterval(mcqVerifyPoll);
+      clearInterval(overlayPoll);
       window.removeEventListener('touchmove', handleTouchMove, { capture: true });
       window.removeEventListener('touchend', handleTouchEnd, { capture: true });
       window.removeEventListener('touchstart', handleTouchStartMulti, { capture: true });
