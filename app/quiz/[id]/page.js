@@ -576,9 +576,18 @@ export default function AdvancedQuizPage() {
       });
     }, 200);
 
-    // 14. Periodic Overlay Injection Checker (3s)
+    // 14. Periodic Overlay & Resize Checker (3s)
     const checkUnauthorizedOverlays = () => {
       if (!examStarted.current) return;
+
+      // 1. Verify window remains maximized (no side panels or split-screens)
+      const isMaximized = window.innerWidth >= window.screen.width - 80;
+      if (!isMaximized) {
+        handleSecurityViolationEvent("resizing browser window / opening side panels");
+        return; // Prioritize resize warning over element overlays
+      }
+
+      // 2. Scan for injected elements
       const bodyChildren = Array.from(document.body.children);
       let foundOverlay = false;
       
