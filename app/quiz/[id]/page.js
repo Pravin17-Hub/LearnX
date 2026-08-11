@@ -81,6 +81,7 @@ export default function AdvancedQuizPage() {
   const isGracePeriod = useRef(true);
   const lastViolationTime = useRef(0);
   const isWarningModalOpen = useRef(false);
+  const topTouchStart = useRef(null);
 
   useEffect(() => {
     if (!quizId) return;
@@ -88,6 +89,20 @@ export default function AdvancedQuizPage() {
   }, [quizId]);
 
   // URL Phase synchronization to act as separate pages
+  useEffect(() => {
+    if (phase === 'playing') {
+      document.documentElement.style.overscrollBehaviorX = 'contain';
+      document.body.style.overscrollBehaviorX = 'contain';
+    } else {
+      document.documentElement.style.overscrollBehaviorX = 'auto';
+      document.body.style.overscrollBehaviorX = 'auto';
+    }
+    return () => {
+      document.documentElement.style.overscrollBehaviorX = 'auto';
+      document.body.style.overscrollBehaviorX = 'auto';
+    };
+  }, [phase]);
+
   useEffect(() => {
     const handlePhasePop = () => {
       if (typeof window !== 'undefined') {
@@ -253,7 +268,36 @@ export default function AdvancedQuizPage() {
       if (diff > 1500) {
         handleSecurityViolationEvent("tab switching (detected via background timer throttling)");
       }
+
+      // Periodic Focus Loss Check to catch sidebar tools/extensions
+      if (!document.hasFocus() && !isGracePeriod.current && !isWarningModalOpen.current) {
+        handleSecurityViolationEvent("focus loss (detected via periodic focus check)");
+      }
     }, 200);
+
+    // Swipe down from top edge (to view notifications drawer) detection
+    const handleTouchStart = (ev) => {
+      if (!examStarted.current) return;
+      const touch = ev.touches[0];
+      if (touch.clientY < 25) {
+        topTouchStart.current = touch.clientY;
+      } else {
+        topTouchStart.current = null;
+      }
+    };
+
+    const handleTouchMove = (ev) => {
+      if (!examStarted.current || topTouchStart.current === null) return;
+      const touch = ev.touches[0];
+      const diffY = touch.clientY - topTouchStart.current;
+      if (diffY > 20) {
+        topTouchStart.current = null;
+        handleSecurityViolationEvent("swiping status bar / notification drawer");
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
 
     // 5. requestAnimationFrame suspension check
     let lastFrameTime = Date.now();
@@ -490,6 +534,8 @@ export default function AdvancedQuizPage() {
       });
       clearInterval(textareaPoll);
       clearInterval(mcqVerifyPoll);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
       domObserver.disconnect();
     };
   }, [phase]);
