@@ -132,7 +132,7 @@ export default function AdvancedQuizPage() {
         const params = new URLSearchParams(window.location.search);
         const urlPhase = params.get('phase') || 'view';
 
-        if (phase === 'playing' && urlPhase !== 'playing') {
+        if (examStarted.current) {
           // Block popstate transition away from active exam without confirmation
           e.stopImmediatePropagation();
           e.stopPropagation();
@@ -160,7 +160,7 @@ export default function AdvancedQuizPage() {
 
     window.addEventListener('popstate', handlePhasePop, true);
     return () => window.removeEventListener('popstate', handlePhasePop, true);
-  }, [phase, allAttemptsList]);
+  }, [allAttemptsList]);
 
   // Main countdown timer
   useEffect(() => {
