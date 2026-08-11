@@ -569,7 +569,12 @@ export default function AdvancedQuizPage() {
           const isFloating = style.position === 'fixed' || style.position === 'absolute';
           const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity || '1') > 0;
           
-          if (isFloating && isVisible) {
+          // Check if it is a large overlay (width & height cover at least 40% of viewport)
+          // Allows small floating helper widgets/icons (Grammarly bubble, translation buttons)
+          const rect = node.getBoundingClientRect ? node.getBoundingClientRect() : { width: 0, height: 0 };
+          const isLargeOverlay = rect.width > window.innerWidth * 0.4 && rect.height > window.innerHeight * 0.4;
+          
+          if (isFloating && isVisible && isLargeOverlay) {
             foundOverlay = true;
             break;
           }
