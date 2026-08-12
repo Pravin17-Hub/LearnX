@@ -86,7 +86,7 @@ export default function Dashboard() {
         .from('classrooms')
         .insert({
           class_name: className,
-          subject: classSubject,
+          subject: user?.department || 'General',
           description: classDesc,
           join_code: code,
           creator_id: user.id
@@ -356,8 +356,7 @@ export default function Dashboard() {
                   }}
                 >
                   <div className="fold"></div>
-                  <div className="course-code mono">{cls.subject}</div>
-                  <h4 className="course-title" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>{cls.class_name}</h4>
+                  <h4 className="course-title" style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: '1.2', letterSpacing: '-0.02em', marginBottom: '0.4rem' }}>{cls.class_name}</h4>
                   <div className="course-teacher" style={{ fontSize: '12px', marginTop: '0.4rem', marginBottom: 0 }}>
                     Code: <span className="mono" style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{cls.join_code}</span>
                   </div>
@@ -502,17 +501,6 @@ export default function Dashboard() {
                   placeholder="E.g. Advanced Operating Systems"
                   value={className}
                   onChange={(e) => setClassName(e.target.value)}
-                />
-              </div>
-              <div className="input-group">
-                <label className="label">Subject Area</label>
-                <input
-                  type="text"
-                  required
-                  className="input"
-                  placeholder="E.g. Computer Science"
-                  value={classSubject}
-                  onChange={(e) => setClassSubject(e.target.value)}
                 />
               </div>
               <div className="input-group">
