@@ -1088,7 +1088,7 @@ export default function ClassroomPage() {
         {/* Create Assignment Modal */}
         {showAssignModal && (
           <div className="modal-overlay">
-            <div className="glass modal-content" style={{ maxWidth: '600px' }}>
+            <div className="glass modal-content" style={{ maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-primary)' }}>Create Assignment</h3>
               {actionError && <div className="alert alert-error">{actionError}</div>}
               <form onSubmit={handleCreateAssignment}>

@@ -225,9 +225,6 @@ export default function MyClassroomsPage() {
                 >
                   <div className="fold"></div>
                   <div>
-                    <div className="course-code mono" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.8, marginBottom: '0.4rem' }}>
-                      {cls.subject}
-                    </div>
                     <h4 className="course-title" style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: '1.2', letterSpacing: '-0.02em', marginBottom: '0.4rem' }}>
                       {cls.class_name}
                     </h4>

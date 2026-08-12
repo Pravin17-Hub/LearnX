@@ -829,7 +829,7 @@ export default function AssignmentDetailsPage() {
       {/* ================= EDIT ASSIGNMENT MODAL ================= */}
       {showEditModal && (
         <div className="modal-overlay" style={{ zIndex: 10000 }}>
-          <div className="glass modal-content" style={{ maxWidth: '600px', background: '#FFFFFF' }}>
+          <div className="glass modal-content" style={{ maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', background: '#FFFFFF' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-primary)' }}>Edit Assignment</h3>
             <form onSubmit={handleEditAssignment}>
               <div className="input-group">
