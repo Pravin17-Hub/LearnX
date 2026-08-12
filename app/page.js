@@ -35,7 +35,13 @@ export default function MyClassroomsPage() {
         .from('users')
         .select('*')
         .eq('email', session.user.email)
-        .single();
+        .maybeSingle();
+      
+      if (!profile) {
+        await supabase.auth.signOut();
+        router.replace('/login');
+        return;
+      }
       
       setUser(profile);
 
