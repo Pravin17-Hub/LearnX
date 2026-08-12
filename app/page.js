@@ -78,7 +78,7 @@ export default function MyClassroomsPage() {
         .from('classrooms')
         .insert({
           class_name: className,
-          subject: classSubject,
+          subject: user?.department || 'General',
           description: classDesc,
           join_code: code,
           creator_id: user.id
@@ -228,7 +228,7 @@ export default function MyClassroomsPage() {
                     <div className="course-code mono" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.8, marginBottom: '0.4rem' }}>
                       {cls.subject}
                     </div>
-                    <h4 className="course-title" style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: '1.3' }}>
+                    <h4 className="course-title" style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: '1.2', letterSpacing: '-0.02em', marginBottom: '0.4rem' }}>
                       {cls.class_name}
                     </h4>
                     {cls.creator?.name && (
@@ -259,20 +259,20 @@ export default function MyClassroomsPage() {
       {/* ================= JOIN CLASSROOM MODAL ================= */}
       {showJoinModal && (
         <div className="modal-overlay">
-          <div className="glass modal-content">
+          <div className="glass modal-content" style={{ maxWidth: '400px' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--text-primary)' }}>Join Classroom</h3>
             {actionError && <div className="alert alert-error">{actionError}</div>}
             {actionSuccess && <div className="alert alert-success">{actionSuccess}</div>}
             <form onSubmit={handleJoinClass}>
               <div className="input-group">
-                <label className="label">Classroom Join Code</label>
+                <label className="label">Classroom Code</label>
                 <input
                   type="text"
                   required
-                  className="input"
-                  placeholder="E.g. A9XF7K"
+                  className="input mono"
+                  placeholder="Enter 6-char code"
                   value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value)}
+                  onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                 />
               </div>
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.75rem' }}>
@@ -305,17 +305,6 @@ export default function MyClassroomsPage() {
                   placeholder="E.g. Advanced Operating Systems"
                   value={className}
                   onChange={(e) => setClassName(e.target.value)}
-                />
-              </div>
-              <div className="input-group">
-                <label className="label">Subject Area</label>
-                <input
-                  type="text"
-                  required
-                  className="input"
-                  placeholder="E.g. Computer Science"
-                  value={classSubject}
-                  onChange={(e) => setClassSubject(e.target.value)}
                 />
               </div>
               <div className="input-group">

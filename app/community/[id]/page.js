@@ -19,6 +19,7 @@ export default function CommunityRoomPage() {
   // Realtime Group Chat States
   const [chatPosts, setChatPosts] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  const [deleteTargetId, setDeleteTargetId] = useState(null);
   
   // File Upload states
   const [fileToShare, setFileToShare] = useState(null);
@@ -132,6 +133,19 @@ export default function CommunityRoomPage() {
           scrollToBottom();
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'community_posts',
+          filter: `community_id=eq.${communityId}`
+        },
+        (payload) => {
+          const updatedPost = payload.new;
+          setChatPosts((prev) => prev.map(p => p.id === updatedPost.id ? { ...p, content: updatedPost.content } : p));
+        }
+      )
       .subscribe();
 
     return () => {
@@ -167,7 +181,7 @@ export default function CommunityRoomPage() {
   };
 
   const handleSendChat = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!newMessage.trim() || !currentUser || !community) return;
 
     const chatContent = newMessage.trim();
@@ -191,6 +205,26 @@ export default function CommunityRoomPage() {
       scrollToBottom();
     } catch (err) {
       alert(`Error sending chat: ${err.message}`);
+    }
+  };
+
+  const handleDeletePost = (postId) => {
+    setDeleteTargetId(postId);
+  };
+
+  const executeDeletePost = async (postId) => {
+    try {
+      const { error } = await supabase
+        .from('community_posts')
+        .update({
+          content: 'This message was deleted'
+        })
+        .eq('id', postId);
+        
+      if (error) throw error;
+      setChatPosts(prev => prev.map(p => p.id === postId ? { ...p, content: 'This message was deleted' } : p));
+    } catch (err) {
+      alert("Error deleting message: " + err.message);
     }
   };
 
@@ -405,6 +439,7 @@ export default function CommunityRoomPage() {
                   ) : (
                     chatPosts.map((post) => {
                       const isMe = currentUser && post.user_id === currentUser.id;
+                      const isDeleted = post.content === 'This message was deleted';
                       const fileUrl = parseFileRef(post.content);
                       const displayContent = cleanFileText(post.content);
                       
@@ -424,16 +459,46 @@ export default function CommunityRoomPage() {
                               background: isMe ? 'var(--color-primary)' : '#FFFFFF',
                               color: isMe ? '#FFFFFF' : 'var(--text-primary)',
                               border: isMe ? 'none' : '1px solid var(--border-color)',
-                              boxShadow: 'var(--shadow-sm)'
+                              boxShadow: 'var(--shadow-sm)',
+                              position: 'relative',
+                              paddingRight: (isMe && !isDeleted) ? '24px' : '1.1rem'
                             }}
                           >
+                            {isMe && !isDeleted && (
+                              <button
+                                onClick={() => handleDeletePost(post.id)}
+                                style={{
+                                  position: 'absolute',
+                                  top: '2px',
+                                  right: '6px',
+                                  background: 'none',
+                                  border: 'none',
+                                  color: 'rgba(255, 255, 255, 0.5)',
+                                  cursor: 'pointer',
+                                  fontSize: '0.75rem',
+                                  padding: '2px',
+                                  zIndex: 10
+                                }}
+                                title="Delete message"
+                                onMouseEnter={(e) => e.target.style.color = '#FFFFFF'}
+                                onMouseLeave={(e) => e.target.style.color = 'rgba(255, 255, 255, 0.5)'}
+                              >
+                                ✕
+                              </button>
+                            )}
                             {!isMe && (
                               <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '0.2rem' }}>
                                 {post.users?.name} (@{post.users?.username})
                               </span>
                             )}
-                            <p style={{ fontSize: '0.9rem', margin: 0, whiteSpace: 'pre-wrap' }}>
-                              {renderMessageWithLinks(displayContent, isMe ? '#FFFFFF' : 'var(--color-primary)')}
+                            <p style={{ 
+                              fontSize: '0.9rem', 
+                              margin: 0, 
+                              whiteSpace: 'pre-wrap',
+                              fontStyle: isDeleted ? 'italic' : 'normal',
+                              opacity: isDeleted ? 0.75 : 1
+                            }}>
+                              {isDeleted ? post.content : renderMessageWithLinks(displayContent, isMe ? '#FFFFFF' : 'var(--color-primary)')}
                             </p>
                             {fileUrl && (
                               <div style={{ marginTop: '0.6rem', borderTop: isMe ? '1px solid rgba(255,255,255,0.2)' : '1px solid var(--border-color)', paddingTop: '0.6rem' }}>
@@ -470,17 +535,22 @@ export default function CommunityRoomPage() {
                 </div>
 
                 {/* Message input form */}
-                <form onSubmit={handleSendChat} style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '1rem', background: '#FFFFFF' }}>
-                  <input
-                    type="text"
+                <form onSubmit={handleSendChat} style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '1rem', background: '#FFFFFF', alignItems: 'flex-end' }}>
+                  <textarea
                     required
-                    placeholder="Type a message to the group..."
+                    placeholder="Type a message to the group... (Shift+Enter for new line)"
                     className="input"
-                    style={{ flex: 1, background: '#F1F5F9' }}
+                    style={{ flex: 1, background: '#F1F5F9', minHeight: '44px', maxHeight: '120px', resize: 'vertical', paddingTop: '0.6rem', paddingBottom: '0.6rem', lineHeight: '1.4' }}
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendChat(e);
+                      }
+                    }}
                   />
-                  <button type="submit" className="btn btn-primary" style={{ padding: '0.6rem 1.5rem' }}>
+                  <button type="submit" className="btn btn-primary" style={{ padding: '0.6rem 1.5rem', height: '44px' }}>
                     Send
                   </button>
                 </form>
@@ -583,6 +653,38 @@ export default function CommunityRoomPage() {
         </div>
 
       </div>
+
+      {/* ================= CUSTOM CONFIRM DELETE MESSAGE ================= */}
+      {deleteTargetId && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="glass modal-content" style={{ maxWidth: '400px', padding: '2rem', textAlign: 'center', background: '#FFFFFF' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.8rem', color: 'var(--text-primary)' }}>Delete Message</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '1.75rem' }}>
+              Are you sure you want to delete this message? This will mark it as deleted for all community members.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={() => setDeleteTargetId(null)} 
+                className="btn btn-secondary" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  const targetId = deleteTargetId;
+                  setDeleteTargetId(null);
+                  await executeDeletePost(targetId);
+                }} 
+                className="btn btn-danger" 
+                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer', background: '#dc2626', color: '#FFFFFF', border: 'none', borderRadius: '4px' }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
