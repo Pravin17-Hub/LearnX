@@ -744,48 +744,24 @@ export default function AdvancedQuizPage() {
     });
 
     const headers = ['Register Number', 'Student Name', 'Marks Obtained', 'Max Marks', 'Violation Reason'];
-    const rows = completedAttempts.map(att => [
-      att.users?.reg_no || 'Guest/N/A',
-      att.users?.name || att.guest_name || 'Guest User',
-      att.score,
-      att.max_score || quiz?.max_marks || 0,
-      att.violation_reason || 'None'
-    ]);
+    const csvRows = [
+      headers.join(','),
+      ...completedAttempts.map(att => {
+        const reg = (att.users?.reg_no || 'Guest/N/A').replace(/"/g, '""');
+        const name = (att.users?.name || att.guest_name || 'Guest User').replace(/\r?\n|\r/g, ' ').replace(/"/g, '""');
+        const score = att.score;
+        const maxScore = att.max_score || quiz?.max_marks || 0;
+        const reason = (att.violation_reason || 'None').replace(/"/g, '""');
+        return `"${reg}","${name}",${score},${maxScore},"${reason}"`;
+      })
+    ];
 
-    const htmlContent = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-      <head>
-        <meta charset="utf-8" />
-        <style>
-          table { font-size: 8pt; font-family: Arial, sans-serif; border-collapse: collapse; }
-          th, td { border: 0.5pt solid #cccccc; padding: 4px; }
-          th { background-color: #f2f2f2; font-weight: bold; }
-        </style>
-      </head>
-      <body>
-        <table>
-          <thead>
-            <tr>
-              ${headers.map(h => `<th>${h}</th>`).join('')}
-            </tr>
-          </thead>
-          <tbody>
-            ${rows.map(row => `
-              <tr>
-                ${row.map(cell => `<td>${cell}</td>`).join('')}
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const csvContent = "\uFEFF" + csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `${quiz?.title?.replace(/\s+/g, '_') || 'test'}_grades.xls`);
+    link.setAttribute('download', `${quiz?.title?.replace(/\s+/g, '_') || 'test'}_grades.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

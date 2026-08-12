@@ -180,6 +180,28 @@ export default function CommunityRoomPage() {
     }
   };
 
+  const handleLeaveCommunity = async () => {
+    if (!confirm("Are you sure you want to leave this community group? You will lose access to the chat room and shared resources.")) return;
+    try {
+      const { error } = await supabase
+        .from('community_members')
+        .delete()
+        .eq('community_id', community.id)
+        .eq('user_id', currentUser.id);
+
+      if (error) throw error;
+
+      await supabase
+        .from('subject_communities')
+        .update({ member_count: Math.max(0, community.member_count - 1) })
+        .eq('id', community.id);
+
+      router.push('/communities');
+    } catch (err) {
+      alert(`Error leaving community: ${err.message}`);
+    }
+  };
+
   const handleSendChat = async (e) => {
     if (e) e.preventDefault();
     if (!newMessage.trim() || !currentUser || !community) return;
@@ -387,9 +409,27 @@ export default function CommunityRoomPage() {
             </div>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0.2rem 0 0 0' }}>{community.description}</p>
           </div>
-          <button className="btn btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => router.push('/communities')}>
-            &larr; Back
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <button
+              onClick={handleLeaveCommunity}
+              className="btn btn-secondary"
+              style={{
+                fontSize: '0.8rem',
+                color: '#dc2626',
+                borderColor: 'rgba(220, 38, 38, 0.2)',
+                background: 'none',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+              onMouseEnter={(e) => { e.target.style.background = 'rgba(220, 38, 38, 0.05)' }}
+              onMouseLeave={(e) => { e.target.style.background = 'none' }}
+            >
+              🚪 Leave Group
+            </button>
+            <button className="btn btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => router.push('/communities')}>
+              &larr; Back
+            </button>
+          </div>
         </div>
       </div>
 

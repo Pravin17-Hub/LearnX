@@ -535,6 +535,39 @@ export default function ClassroomPage() {
     }
   };
 
+  const handleRemoveStudent = async (studentId) => {
+    if (!confirm("Are you sure you want to remove this student from the classroom?")) return;
+    try {
+      const { error } = await supabase
+        .from('classroom_members')
+        .delete()
+        .eq('classroom_id', classroomId)
+        .eq('user_id', studentId);
+
+      if (error) throw error;
+      setMembers(prev => prev.filter(m => m.user_id !== studentId));
+      triggerToast('Success', 'Student removed from classroom.');
+    } catch (err) {
+      triggerToast('Error removing student', err.message);
+    }
+  };
+
+  const handleLeaveClassroom = async () => {
+    if (!confirm("Are you sure you want to leave this classroom? You will lose access to all assignments, grades, and materials.")) return;
+    try {
+      const { error } = await supabase
+        .from('classroom_members')
+        .delete()
+        .eq('classroom_id', classroomId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      router.replace('/');
+    } catch (err) {
+      triggerToast('Error leaving classroom', err.message);
+    }
+  };
+
   const handleEditQuizClick = async (quizItem, e) => {
     e.stopPropagation();
     setSelectedQuizToEdit(quizItem);
@@ -670,9 +703,30 @@ export default function ClassroomPage() {
               <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>{classroom.class_name}</h1>
               <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>{classroom.description}</p>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)' }}>JOIN CODE</span>
-              <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-secondary)' }}>{classroom.join_code}</span>
+            <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+              <div>
+                <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)' }}>JOIN CODE</span>
+                <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-secondary)' }}>{classroom.join_code}</span>
+              </div>
+              {!isClassCreator && (
+                <button
+                  onClick={handleLeaveClassroom}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.75rem',
+                    color: '#dc2626',
+                    borderColor: 'rgba(220, 38, 38, 0.2)',
+                    background: 'none',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={(e) => { e.target.style.background = 'rgba(220, 38, 38, 0.05)' }}
+                  onMouseLeave={(e) => { e.target.style.background = 'none' }}
+                >
+                  🚪 Leave Class
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -956,19 +1010,41 @@ export default function ClassroomPage() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
                 {members.map((member) => (
-                  <div key={member.user_id} className="glass card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem' }}>
-                    <img
-                      src={member.users?.avatar_path || '/assets/images/default-avatar.png'}
-                      alt="avatar"
-                      style={{ width: '45px', height: '45px', borderRadius: '50%', objectFit: 'cover' }}
-                    />
-                    <div>
-                      <h4 style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{member.users?.name}</h4>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>@{member.users?.username}</span>
-                      <span className="badge badge-student" style={{ marginLeft: '0.5rem', fontSize: '0.65rem' }}>
-                        {member.role_in_class}
-                      </span>
+                  <div key={member.user_id} className="glass card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                      <img
+                        src={member.users?.avatar_path || '/assets/images/default-avatar.png'}
+                        alt="avatar"
+                        style={{ width: '45px', height: '45px', borderRadius: '50%', objectFit: 'cover' }}
+                      />
+                      <div>
+                        <h4 style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{member.users?.name}</h4>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>@{member.users?.username}</span>
+                        <span className="badge badge-student" style={{ marginLeft: '0.5rem', fontSize: '0.65rem' }}>
+                          {member.role_in_class}
+                        </span>
+                      </div>
                     </div>
+                    {isTeacher && member.user_id !== user?.id && (
+                      <button
+                        onClick={() => handleRemoveStudent(member.user_id)}
+                        className="btn"
+                        style={{
+                          padding: '0.3rem 0.6rem',
+                          fontSize: '0.7rem',
+                          color: '#dc2626',
+                          background: 'none',
+                          border: '1px solid rgba(220, 38, 38, 0.2)',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          borderRadius: '4px'
+                        }}
+                        onMouseEnter={(e) => { e.target.style.background = 'rgba(220, 38, 38, 0.05)' }}
+                        onMouseLeave={(e) => { e.target.style.background = 'none' }}
+                      >
+                        Remove
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
