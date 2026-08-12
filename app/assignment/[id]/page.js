@@ -33,6 +33,20 @@ export default function AssignmentDetailsPage() {
   const [toast, setToast] = useState(null);
   const [deleteTargetId, setDeleteTargetId] = useState(null);
 
+  // Edit Assignment Modal States
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editDeadline, setEditDeadline] = useState('');
+  const [editMaxMarks, setEditMaxMarks] = useState('');
+  const [editRubric, setEditRubric] = useState('');
+  const [editAnswerKey, setEditAnswerKey] = useState('');
+  const [editFile, setEditFile] = useState(null);
+
+  // Student Typed Answer States
+  const [submissionMethod, setSubmissionMethod] = useState('file'); // 'file' | 'text'
+  const [typedAnswer, setTypedAnswer] = useState('');
+
   const triggerToast = (title, body) => {
     setToast({ title, body });
     setTimeout(() => {
@@ -74,6 +88,20 @@ export default function AssignmentDetailsPage() {
       .single();
     setAssignment(assign);
 
+    if (assign) {
+      setEditTitle(assign.title || '');
+      setEditDesc(assign.description || '');
+      if (assign.deadline) {
+        const dt = new Date(assign.deadline);
+        const tzoffset = dt.getTimezoneOffset() * 60000;
+        const localISOTime = (new Date(dt.getTime() - tzoffset)).toISOString().slice(0, 16);
+        setEditDeadline(localISOTime);
+      }
+      setEditMaxMarks(assign.max_marks || '');
+      setEditRubric(assign.rubric || '');
+      setEditAnswerKey(assign.answer_key || '');
+    }
+
     if (assign && profile) {
       const isFacultyUser = profile.role === 'Faculty' || profile.role === 'Administrator';
 
@@ -103,52 +131,62 @@ export default function AssignmentDetailsPage() {
   // Student upload & evaluation routine
   const handleSubmitAssignment = async (e) => {
     e.preventDefault();
-    if (!fileToUpload) return;
-    setSubmissionError(null);
-    setGradingProgress('uploading');
+    if (submissionMethod === 'file' && !fileToUpload) return;
+    if (submissionMethod === 'text' && !typedAnswer.trim()) return;
 
+    setSubmissionError(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       const authHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-      const uploadFormData = new FormData();
-      uploadFormData.append('file', fileToUpload);
-      uploadFormData.append('folder', 'submissions');
+      let extractedText = "";
+      let publicUrl = null;
 
-      const uploadRes = await fetch('/api/upload', {
-        method: 'POST',
-        headers: authHeaders,
-        body: uploadFormData,
-      });
+      if (submissionMethod === 'file') {
+        setGradingProgress('uploading');
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', fileToUpload);
+        uploadFormData.append('folder', 'submissions');
 
-      if (!uploadRes.ok) {
-        const uploadErrJson = await uploadRes.json();
-        throw new Error(uploadErrJson.error || 'Failed to upload submission file.');
-      }
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          headers: authHeaders,
+          body: uploadFormData,
+        });
 
-      const { url: publicUrl } = await uploadRes.json();
+        if (!uploadRes.ok) {
+          const uploadErrJson = await uploadRes.json();
+          throw new Error(uploadErrJson.error || 'Failed to upload submission file.');
+        }
 
-      // 2. OCR Text Extraction API
-      setGradingProgress('extracting');
-      const ocrFormData = new FormData();
-      ocrFormData.append('file', fileToUpload);
+        const { url } = await uploadRes.json();
+        publicUrl = url;
 
-      const ocrRes = await fetch('/api/ocr', {
-        method: 'POST',
-        headers: authHeaders,
-        body: ocrFormData,
-      });
+        // 2. OCR Text Extraction API
+        setGradingProgress('extracting');
+        const ocrFormData = new FormData();
+        ocrFormData.append('file', fileToUpload);
 
-      if (!ocrRes.ok) {
-        const errJson = await ocrRes.json();
-        throw new Error(errJson.error || 'Failed to extract text from file.');
-      }
+        const ocrRes = await fetch('/api/ocr', {
+          method: 'POST',
+          headers: authHeaders,
+          body: ocrFormData,
+        });
 
-      const { text: extractedText } = await ocrRes.json();
+        if (!ocrRes.ok) {
+          const errJson = await ocrRes.json();
+          throw new Error(errJson.error || 'Failed to extract text from file.');
+        }
 
-      if (!extractedText || extractedText.trim() === '') {
-        throw new Error('Empty text extracted. Please ensure the document is clear and readable.');
+        const { text } = await ocrRes.json();
+        extractedText = text;
+
+        if (!extractedText || extractedText.trim() === '') {
+          throw new Error('Empty text extracted. Please ensure the document is clear and readable.');
+        }
+      } else {
+        extractedText = typedAnswer.trim();
       }
 
       // 3. AI Grading / Evaluation API (Fixed route URL path)
@@ -259,6 +297,70 @@ export default function AssignmentDetailsPage() {
     setDeleteTargetId(submissionId);
   };
 
+  const handleEditAssignment = async (e) => {
+    e.preventDefault();
+    try {
+      let finalFilePath = assignment.file_path;
+
+      if (editFile) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const authHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', editFile);
+        uploadFormData.append('folder', 'assignments');
+
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          headers: authHeaders,
+          body: uploadFormData,
+        });
+
+        if (!uploadRes.ok) throw new Error('Failed to upload new question sheet.');
+        const { url } = await uploadRes.json();
+        finalFilePath = url;
+      }
+
+      const { data: updatedAssign, error } = await supabase
+        .from('assignments')
+        .update({
+          title: editTitle,
+          description: editDesc,
+          max_marks: Number(editMaxMarks),
+          deadline: new Date(editDeadline).toISOString(),
+          rubric: editRubric,
+          answer_key: editAnswerKey,
+          file_path: finalFilePath
+        })
+        .eq('id', assignmentId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setAssignment(updatedAssign);
+      setShowEditModal(false);
+      triggerToast('Success', 'Assignment updated successfully.');
+    } catch (err) {
+      triggerToast('Update failed', err.message);
+    }
+  };
+
+  const handleDeleteAssignment = async () => {
+    if (!confirm("Are you sure you want to delete this assignment? All submissions and grades will be permanently deleted.")) return;
+    try {
+      const { error } = await supabase
+        .from('assignments')
+        .delete()
+        .eq('id', assignmentId);
+
+      if (error) throw error;
+      router.replace(`/classroom/${assignment.classroom_id}`);
+    } catch (err) {
+      triggerToast('Delete failed', err.message);
+    }
+  };
+
   const executeDeleteSubmission = async (submissionId) => {
     try {
       const { error } = await supabase
@@ -324,8 +426,26 @@ export default function AssignmentDetailsPage() {
       <div className="container">
         
         {/* Assignment Details Header */}
-        <div className="glass card" style={{ padding: '2rem', marginBottom: '2.5rem' }}>
-          <h2 style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>{assignment?.title}</h2>
+        <div className="glass card" style={{ padding: '2rem', marginBottom: '2.5rem', position: 'relative' }}>
+          {isFaculty && (
+            <div style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', display: 'flex', gap: '0.75rem' }}>
+              <button 
+                onClick={() => setShowEditModal(true)} 
+                className="btn btn-secondary" 
+                style={{ fontSize: '0.8rem', padding: '0.4rem 1rem' }}
+              >
+                ✏️ Edit
+              </button>
+              <button 
+                onClick={handleDeleteAssignment} 
+                className="btn btn-danger" 
+                style={{ fontSize: '0.8rem', padding: '0.4rem 1rem', background: '#dc2626', color: '#FFF', border: 'none', borderRadius: '4px' }}
+              >
+                🗑️ Delete
+              </button>
+            </div>
+          )}
+          <h2 style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)', paddingRight: isFaculty ? '160px' : '0' }}>{assignment?.title}</h2>
           <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem', fontSize: '1rem', whiteSpace: 'pre-wrap' }}>
             {assignment?.description}
           </p>
@@ -434,21 +554,55 @@ export default function AssignmentDetailsPage() {
                 {(!submission || isResubmitting || gradingProgress === 'failed') && (
                   <form onSubmit={handleSubmitAssignment} className="glass card" style={{ padding: '2rem', textAlign: 'center' }}>
                     {submissionError && <div className="alert alert-error">{submissionError}</div>}
-                    <div style={{ border: '2px dashed var(--border-color)', borderRadius: 'var(--radius)', padding: '2.5rem', marginBottom: '1.5rem', background: 'rgba(0,0,0,0.01)' }}>
-                      <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-                        Drag and drop your assignment document here (PDF, DOCX, PNG, JPG).
-                      </p>
-                      <input
-                        type="file"
-                        required
-                        accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt"
-                        onChange={(e) => setFileToUpload(e.target.files[0])}
-                        style={{ display: 'block', margin: '0 auto', fontSize: '0.85rem' }}
-                      />
-                      <span style={{ display: 'block', marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        Maximum File Size: 1.5MB
-                      </span>
+                    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginBottom: '1.5rem' }}>
+                      <button
+                        type="button"
+                        className={submissionMethod === 'file' ? 'btn btn-primary' : 'btn btn-secondary'}
+                        style={{ fontSize: '0.8rem', padding: '0.4rem 1rem' }}
+                        onClick={() => setSubmissionMethod('file')}
+                      >
+                        📄 Upload File
+                      </button>
+                      <button
+                        type="button"
+                        className={submissionMethod === 'text' ? 'btn btn-primary' : 'btn btn-secondary'}
+                        style={{ fontSize: '0.8rem', padding: '0.4rem 1rem' }}
+                        onClick={() => setSubmissionMethod('text')}
+                      >
+                        ✍️ Type Answer
+                      </button>
                     </div>
+
+                    {submissionMethod === 'file' ? (
+                      <div style={{ border: '2px dashed var(--border-color)', borderRadius: 'var(--radius)', padding: '2.5rem', marginBottom: '1.5rem', background: 'rgba(0,0,0,0.01)' }}>
+                        <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                          Drag and drop your assignment document here (PDF, DOCX, PNG, JPG).
+                        </p>
+                        <input
+                          type="file"
+                          required
+                          accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt"
+                          onChange={(e) => setFileToUpload(e.target.files[0])}
+                          style={{ display: 'block', margin: '0 auto', fontSize: '0.85rem' }}
+                        />
+                        <span style={{ display: 'block', marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          Maximum File Size: 1.5MB
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="input-group" style={{ marginBottom: '1.5rem', textAlign: 'left' }}>
+                        <label className="label">Type your Answer here</label>
+                        <textarea
+                          required
+                          className="input"
+                          style={{ minHeight: '200px', resize: 'vertical' }}
+                          placeholder="Type or paste your complete answer or essay here..."
+                          value={typedAnswer}
+                          onChange={(e) => setTypedAnswer(e.target.value)}
+                        />
+                      </div>
+                    )}
+
                     <button type="submit" className="btn btn-primary" style={{ padding: '0.6rem 2.0rem' }}>
                       Submit & Auto-Grade
                     </button>
@@ -540,6 +694,24 @@ export default function AssignmentDetailsPage() {
                           >
                             📄 View Uploaded File
                           </a>
+                        )}
+                        {selectedSub.ocr_text && (
+                          <button
+                            onClick={() => {
+                              const blob = new Blob([selectedSub.ocr_text], { type: 'text/plain;charset=utf-8;' });
+                              const url = URL.createObjectURL(blob);
+                              const link = document.createElement('a');
+                              link.setAttribute('href', url);
+                              link.setAttribute('download', `${(selectedSub.users?.name || 'student').replace(/\s+/g, '_')}_Answer.txt`);
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            className="btn btn-secondary"
+                            style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+                          >
+                            📥 Download Answer (TXT)
+                          </button>
                         )}
                         <button
                           onClick={() => handleDeleteSubmission(selectedSub.id)}
@@ -654,6 +826,92 @@ export default function AssignmentDetailsPage() {
       )}
 
       {/* ================= IN-SCREEN CUSTOM TOAST NOTIFICATIONS ================= */}
+      {/* ================= EDIT ASSIGNMENT MODAL ================= */}
+      {showEditModal && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="glass modal-content" style={{ maxWidth: '600px', background: '#FFFFFF' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-primary)' }}>Edit Assignment</h3>
+            <form onSubmit={handleEditAssignment}>
+              <div className="input-group">
+                <label className="label">Title</label>
+                <input
+                  type="text"
+                  required
+                  className="input"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                />
+              </div>
+              <div className="input-group">
+                <label className="label">Description / Instructions</label>
+                <textarea
+                  className="input"
+                  style={{ minHeight: '80px', resize: 'vertical' }}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="input-group">
+                  <label className="label">Deadline</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    className="input"
+                    value={editDeadline}
+                    onChange={(e) => setEditDeadline(e.target.value)}
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="label">Max Marks</label>
+                  <input
+                    type="number"
+                    required
+                    className="input"
+                    value={editMaxMarks}
+                    onChange={(e) => setEditMaxMarks(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="input-group">
+                <label className="label">Grading Rubric (For AI Evaluator)</label>
+                <textarea
+                  className="input"
+                  style={{ minHeight: '60px', resize: 'vertical' }}
+                  value={editRubric}
+                  onChange={(e) => setEditRubric(e.target.value)}
+                />
+              </div>
+              <div className="input-group">
+                <label className="label">Answer Key / Ideal Concepts (For AI Comparison)</label>
+                <textarea
+                  className="input"
+                  style={{ minHeight: '60px', resize: 'vertical' }}
+                  value={editAnswerKey}
+                  onChange={(e) => setEditAnswerKey(e.target.value)}
+                />
+              </div>
+              <div className="input-group">
+                <label className="label">Upload New Question Sheet (Optional PDF/DOCX/Image)</label>
+                <input
+                  type="file"
+                  className="input"
+                  onChange={(e) => setEditFile(e.target.files[0])}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {toast && (
         <div style={{
           position: 'fixed',

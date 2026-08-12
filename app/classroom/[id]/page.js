@@ -86,6 +86,8 @@ export default function ClassroomPage() {
   const [assignAnswerKey, setAssignAnswerKey] = useState('');
   const [assignMaxMarks, setAssignMaxMarks] = useState(100);
   const [assignFile, setAssignFile] = useState(null);
+  const [assignQuestionText, setAssignQuestionText] = useState('');
+  const [submissionsCounts, setSubmissionsCounts] = useState({});
 
   const [matTitle, setMatTitle] = useState('');
   const [matDesc, setMatDesc] = useState('');
@@ -179,6 +181,22 @@ export default function ClassroomPage() {
         .order('deadline', { ascending: true });
       setAssignments(assigns || []);
 
+      if (assigns && assigns.length > 0) {
+        const { data: allSubs } = await supabase
+          .from('assignment_submissions')
+          .select('assignment_id')
+          .in('assignment_id', assigns.map(a => a.id));
+        
+        const counts = {};
+        assigns.forEach(a => { counts[a.id] = 0; });
+        allSubs?.forEach(s => {
+          if (counts[s.assignment_id] !== undefined) {
+            counts[s.assignment_id]++;
+          }
+        });
+        setSubmissionsCounts(counts);
+      }
+
       // Fetch Quizzes/Exams
       const { data: qzs } = await supabase
         .from('quizzes')
@@ -224,6 +242,12 @@ export default function ClassroomPage() {
   const handleCreateAssignment = async (e) => {
     e.preventDefault();
     setActionError(null);
+
+    if (!assignDesc.trim() && !assignQuestionText.trim() && !assignFile) {
+      setActionError("Please provide either Description instructions, Question Text, or upload a Question Sheet file.");
+      return;
+    }
+
     try {
       let uploadedFilePath = null;
       let questionSheetText = "";
@@ -273,16 +297,20 @@ export default function ClassroomPage() {
       }
 
       // 3. Save assignment in database
-      const descriptionWithQP = questionSheetText 
-        ? `${assignDesc}\n\n[Question Paper Content]:\n${questionSheetText}`
-        : assignDesc;
+      let finalDescription = assignDesc;
+      if (assignQuestionText.trim()) {
+        finalDescription += `\n\n[Question Text]:\n${assignQuestionText.trim()}`;
+      }
+      if (questionSheetText) {
+        finalDescription += `\n\n[Question Paper Content]:\n${questionSheetText}`;
+      }
 
       const { data: newAssign, error } = await supabase
         .from('assignments')
         .insert({
           classroom_id: classroomId,
           title: assignTitle,
-          description: descriptionWithQP,
+          description: finalDescription,
           answer_key: assignAnswerKey,
           rubric: assignRubric,
           max_marks: Number(assignMaxMarks),
@@ -296,9 +324,11 @@ export default function ClassroomPage() {
       if (error) throw error;
 
       setAssignments([...assignments, newAssign]);
+      setSubmissionsCounts(prev => ({ ...prev, [newAssign.id]: 0 }));
       setShowAssignModal(false);
       setAssignTitle('');
       setAssignDesc('');
+      setAssignQuestionText('');
       setAssignDeadline('');
       setAssignRubric('');
       setAssignAnswerKey('');
@@ -697,9 +727,6 @@ export default function ClassroomPage() {
         <div className="glass card" style={{ padding: '2rem', marginBottom: '2rem', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.06) 0%, rgba(6, 182, 212, 0.06) 100%)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
             <div>
-              <span className="badge badge-student" style={{ marginBottom: '0.5rem', background: 'rgba(6, 182, 212, 0.12)', color: '#0891b2' }}>
-                {classroom.subject}
-              </span>
               <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>{classroom.class_name}</h1>
               <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>{classroom.description}</p>
             </div>
@@ -798,6 +825,11 @@ export default function ClassroomPage() {
                         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
                           Due: {new Date(assign.deadline).toLocaleString()}
                         </p>
+                        {submissionsCounts[assign.id] !== undefined && (
+                          <p style={{ fontSize: '0.75rem', fontWeight: 650, color: 'var(--color-primary)', marginTop: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            📊 Submitted: {submissionsCounts[assign.id]} / {studentCount}
+                          </p>
+                        )}
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)' }}>MAX MARKS</span>
@@ -1074,12 +1106,21 @@ export default function ClassroomPage() {
                 <div className="input-group">
                   <label className="label">Description / Instructions</label>
                   <textarea
-                    required
                     className="input"
                     style={{ minHeight: '80px', resize: 'vertical' }}
                     placeholder="Provide details on the homework guidelines..."
                     value={assignDesc}
                     onChange={(e) => setAssignDesc(e.target.value)}
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="label">Question Text (Optional if Question Sheet is uploaded)</label>
+                  <textarea
+                    className="input"
+                    style={{ minHeight: '80px', resize: 'vertical' }}
+                    placeholder="Type the actual exam/assignment questions directly here..."
+                    value={assignQuestionText}
+                    onChange={(e) => setAssignQuestionText(e.target.value)}
                   />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
