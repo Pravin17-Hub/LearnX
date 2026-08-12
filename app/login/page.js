@@ -53,7 +53,7 @@ export default function LoginPage() {
           .from('users')
           .select('*')
           .eq('email', email)
-          .single();
+          .maybeSingle();
 
         if (profileError || !profile) {
           // Fallback if record doesn't exist in profile table: create a minimal record
