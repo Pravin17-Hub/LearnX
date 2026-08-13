@@ -173,7 +173,6 @@ Student Answer: ${studentAnswer}`;
         { role: 'user', content: userContent },
       ],
       temperature: 0.0,
-      seed: 42,
     };
 
     let response = await fetch(apiUrl, {
