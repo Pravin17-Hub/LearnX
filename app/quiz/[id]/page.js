@@ -1944,7 +1944,6 @@ export default function AdvancedQuizPage() {
             <div class="student-info">
               <div>Student Name: <strong>${studentName}</strong></div>
               <div>Register Number: <strong>${regNo}</strong></div>
-              <div>Submit Time: <strong>${new Date(attempt.submit_time || attempt.start_time).toLocaleTimeString()}</strong></div>
             </div>
           </div>
           <div class="questions-container">
