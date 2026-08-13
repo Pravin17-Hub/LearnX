@@ -172,62 +172,8 @@ Student Answer: ${studentAnswer}`;
       temperature: 0.0,
     };
 
-    let response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    // Auto-fallback if the API request fails (e.g. rate limit 429)
-    if (!response.ok) {
-      const isGemini = process.env.GEMINI_API_KEY && apiKey === process.env.GEMINI_API_KEY;
-      const fallbackApiKey = isGemini ? (process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY) : null;
-      
-      if (fallbackApiKey) {
-        console.warn(`Primary AI evaluation failed with status ${response.status}. Automatically falling back to backup provider...`);
-        const fallbackIsGroq = fallbackApiKey.startsWith('gsk_');
-        const fallbackUrl = fallbackIsGroq
-          ? 'https://api.groq.com/openai/v1/chat/completions'
-          : 'https://api.openai.com/v1/chat/completions';
-        const fallbackModel = fallbackIsGroq ? 'llama-3.1-8b-instant' : 'gpt-4o-mini';
-
-        const fallbackRequestBody = {
-          ...requestBody,
-          model: fallbackModel
-        };
-
-        response = await fetch(fallbackUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${fallbackApiKey}`,
-          },
-          body: JSON.stringify(fallbackRequestBody),
-        });
-      }
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return NextResponse.json(
-        { error: `AI service status ${response.status}: ${errorText}` },
-        { status: 500 }
-      );
-    }
-
-    const responseJson = await response.json();
-    const jsonText = responseJson.choices?.[0]?.message?.content || '{}';
-    
-    // Robust cleanup of markdown wrappers if present
-    let cleanJson = jsonText.trim();
-    if (cleanJson.startsWith('```')) {
-      cleanJson = cleanJson.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
-    }
-    
-    const parsedEvaluation = JSON.parse(cleanJson);
+    const { addToQueue } = require('../../../lib/evaluateQueue');
+    const parsedEvaluation = await addToQueue(systemPrompt, userContent);
     
     // Programmatically calculate total score and breakdown text in JS to ensure mathematical consistency
     let finalCalculatedScore = 0;

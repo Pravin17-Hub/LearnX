@@ -647,7 +647,7 @@ export default function AssignmentDetailsPage() {
                     <p style={{ fontWeight: 600 }}>
                       {gradingProgress === 'uploading' && 'Uploading document to Supabase storage...'}
                       {gradingProgress === 'extracting' && 'Running serverless document parser (OCR)...'}
-                      {gradingProgress === 'evaluating' && 'Comparing with answer key via AI grader...'}
+                      {gradingProgress === 'evaluating' && 'Comparing with answer key via AI grader. Please wait, this may take a moment if multiple students submit at the same time...'}
                     </p>
                   </div>
                 )}

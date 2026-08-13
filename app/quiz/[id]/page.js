@@ -2267,7 +2267,7 @@ export default function AdvancedQuizPage() {
                 <div style={{ border: '3px solid rgba(0,0,0,0.05)', borderLeftColor: 'var(--color-primary)', borderRadius: '50%', width: '35px', height: '35px', animation: 'spin 1s linear infinite', margin: '0 auto 1rem' }}></div>
                 <p style={{ fontWeight: 700 }}>
                   {submissionProgress === 'grading_mcqs' && 'Grading Multiple Choice Questions...'}
-                  {submissionProgress === 'grading_theory' && 'Running serverless AI evaluator for Theory answers...'}
+                  {submissionProgress === 'grading_theory' && 'Evaluating Theory answers with safe queue rotation. Please wait, this may take a moment if multiple students submit at the same time...'}
                   {submissionProgress === 'saving' && 'Saving scores to database...'}
                 </p>
               </div>
