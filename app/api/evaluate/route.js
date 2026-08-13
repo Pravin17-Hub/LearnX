@@ -113,7 +113,7 @@ export async function POST(request) {
       : question;
 
     const systemPrompt = `You are an expert academic evaluator. You are given the Assignment details, an Answer Key, a Grading Rubric, and the Maximum Marks.
-Evaluate the student's response strictly, methodically, and mathematically by following these rules:
+Evaluate the student's response methodically and mathematically by following these rules:
 1. IDENTIFY OFFICIAL QUESTIONS:
    - Identify the specific questions from the assignment text (\`question\`). If the assignment text lists specific questions (including any extracted question paper content listed in the description under '[Question Paper Content]:'), those are the ONLY official questions to grade.
    - If the assignment text (\`question\`) does not contain specific questions, look at the \`answerKey\` to identify them.
@@ -122,12 +122,9 @@ Evaluate the student's response strictly, methodically, and mathematically by fo
 2. EVALUATE ACCURACY & ALLOCATE MARKS:
    - Determine the exact total number of official questions (N).
    - The maximum marks allocated to EACH individual question MUST be exactly equal to: Maximum Marks (${maxMarks}) / N. Do NOT allocate custom weights, and do NOT group questions together. For example, if Maximum Marks is 100 and there are 20 questions, each question is worth exactly 5 marks.
-   - Grade each of the N questions individually and strictly out of its calculated share of marks (e.g. 5 marks) based on correctness, depth, length, and quality:
-     - **EXPECTED CONTENT LENGTH & DEPTH BY MARKS**:
-       - For questions worth **2 marks or less**: A short, direct answer is acceptable (e.g., 10-30 words).
-       - For questions worth **3 to 5 marks**: The answer MUST be detailed, explanation-rich, and have substantial content (typically 50-100+ words). A brief or superficial answer (e.g., only 15 words) is a major deficiency in depth; deduct significant marks (e.g., award at most 2 out of 5 marks) for lack of explanation, examples, or elaboration, even if the statement itself is factually correct.
-       - For questions worth **more than 5 marks**: The answer MUST be comprehensive, structured, include diagrams/code/examples where appropriate, and demonstrate extensive depth (typically 100-200+ words). Deduct heavily if the answer is short or brief.
-     - **QUALITY & CORRECTNESS**: Evaluate academic accuracy and quality against the provided \`answerKey\` and \`rubric\`. Deduct marks for factual errors, superficial explanations, or missing core concepts.
+   - Grade each of the N questions individually out of its calculated share of marks:
+     - **EXTREME LENIENCY ON CODE SYNTAX & TYPOS**: The students are writing code under exam pressure without an autocomplete IDE. You MUST be extremely lenient. Do NOT deduct marks for minor syntax errors (such as using '=' instead of ':' inside objects, missing dots in 'this.name', minor bracket mismatches, or simple typos) as long as the student has demonstrated conceptual understanding, listed correct types, and provided the correct examples. Award high marks (70% to 100%) for such answers.
+     - **CREDIT FOR TYPES & EXAMPLES**: Even if the core definition itself is weak, flawed, or incorrect, if the student provides correct sub-types and/or valid examples, you MUST award high partial marks (at least 60% to 80% of the question's maximum marks).
      - If a question is unanswered or missing in the student's submission, you MUST award exactly 0 marks for that specific question.
 3. OUTPUT FORMAT:
    - Return a JSON object with a structured \`question_breakdown\` array. The array must contain exactly N items (one for each of the N official questions).
@@ -239,8 +236,13 @@ Student Answer: ${studentAnswer}`;
 
     if (Array.isArray(parsedEvaluation.question_breakdown)) {
       parsedEvaluation.question_breakdown.forEach((q) => {
-        finalCalculatedScore += Number(q.score) || 0;
-        finalMaxMarksSum += Number(q.max_marks) || 0;
+        // Cap individual question score at its max marks to prevent AI hallucinations/mismatch bugs
+        const maxQ = Number(q.max_marks) || 0;
+        const cappedScore = Math.min(maxQ, Number(q.score) || 0);
+        q.score = cappedScore;
+
+        finalCalculatedScore += cappedScore;
+        finalMaxMarksSum += maxQ;
         breakdownParts.push(`Question ${q.question_number}: ${q.score}/${q.max_marks}`);
       });
     }
