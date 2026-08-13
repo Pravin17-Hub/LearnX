@@ -131,7 +131,7 @@ Evaluate the student's response methodically and mathematically by following the
          - **PARTIAL ANSWER (50% to 70%)**: If the student attempted the question and provided partial answers or definitions covering all required items from the given rubric, award between 50% and 70% of the question's maximum marks.
          - **ALL CORRECT & COMPLETE (80% to 100%)**: If the answer is correct, technically sound, and does not miss anything specified in the rubrics, award between 80% and 100% of the question's maximum marks.
          - **MISSED TOPIC PENALTY**: Reduce exactly 1 mark (from the question's maximum marks) if any of the key topics or required rubric elements are missed.
-         - **MINIMUM MARKS FOR RELATED ANSWERS**: If the student's answer is not empty and contains at least something related to the question/topic, you MUST award a minimum of 1.0 mark (even if the content is incorrect, flawed, or extremely short). Only award exactly 0 marks if the answer is completely blank, unanswered, or contains nothing related to the topic.
+         - **MINIMUM MARKS FOR RELATED ANSWERS**: If the student's answer is not empty and contains at least something related to the question/topic (even if the content is incorrect, flawed, or extremely short), you MUST award a minimum of 1.0 mark. However, if the answer is completely unrelated to the question/topic, or is blank/unanswered, you MUST award exactly 0 marks.
          - **LENIENCY ON CODE SYNTAX & TYPOS**: Keep leniency for minor syntax errors and simple typos since students write code under exam pressure without autocomplete IDEs.
       - If a question is unanswered or missing in the student's submission, you MUST award exactly 0 marks for that specific question.
 3. OUTPUT FORMAT:
