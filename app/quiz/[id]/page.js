@@ -66,6 +66,8 @@ export default function AdvancedQuizPage() {
     }, 4000);
   };
   const [totalClassroomStudents, setTotalClassroomStudents] = useState(0);
+  const [classroomStudents, setClassroomStudents] = useState([]);
+  const [showAbsentModal, setShowAbsentModal] = useState(false);
   const [isClassCreator, setIsClassCreator] = useState(false);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -810,12 +812,13 @@ export default function AdvancedQuizPage() {
       if (qz.classroom_id) {
         const { data: membersData } = await supabase
           .from('classroom_members')
-          .select('*, users!user_id(role)')
+          .select('*, users!user_id(id, name, username, reg_no, role)')
           .eq('classroom_id', qz.classroom_id);
           
         if (membersData) {
-          const totalStudents = membersData.filter(m => m.users?.role === 'Student' || m.users?.role === 'Teaching Assistant' || m.users?.role === 'Research Scholar' || m.users?.role === 'Mentor').length;
-          setTotalClassroomStudents(totalStudents);
+          const students = membersData.filter(m => m.users?.role === 'Student' || m.users?.role === 'Teaching Assistant' || m.users?.role === 'Research Scholar' || m.users?.role === 'Mentor');
+          setTotalClassroomStudents(students.length);
+          setClassroomStudents(students);
         }
       }
 
@@ -948,14 +951,14 @@ export default function AdvancedQuizPage() {
     if (start && now < start) {
       return { 
         isAccessible: false, 
-        message: `This exam has not started yet. It is scheduled to start at ${start.toLocaleString()}.` 
+        message: `This exam has not started yet. It is scheduled to start at ${start.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}.` 
       };
     }
 
     if (end && now > end) {
       return { 
         isAccessible: false, 
-        message: `This exam is closed. The scheduled end time was ${end.toLocaleString()}.` 
+        message: `This exam is closed. The scheduled end time was ${end.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}.` 
       };
     }
 
@@ -1997,7 +2000,7 @@ export default function AdvancedQuizPage() {
                           </p>
                           {quiz?.scheduled_start && (
                             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-                              🗓️ Scheduled: {new Date(quiz.scheduled_start).toLocaleString()} to {quiz.scheduled_end ? new Date(quiz.scheduled_end).toLocaleString() : 'Open-Ended'}
+                              🗓️ Scheduled: {new Date(quiz.scheduled_start).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} to {quiz.scheduled_end ? new Date(quiz.scheduled_end).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Open-Ended'}
                             </p>
                           )}
                           <button 
@@ -2066,6 +2069,13 @@ export default function AdvancedQuizPage() {
                         >
                           📊 Export Test Grades
                         </button>
+                        <button
+                          onClick={() => setShowAbsentModal(true)}
+                          className="btn btn-primary"
+                          style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}
+                        >
+                          ⚠️ Absent Students
+                        </button>
                       </div>
                     </div>
                     {(() => {
@@ -2091,7 +2101,7 @@ export default function AdvancedQuizPage() {
                                   </span>
                                 )}
                                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                  Submitted/Last Saved: {new Date(att.submit_time || att.start_time).toLocaleString()}
+                                  Submitted/Last Saved: {new Date(att.submit_time || att.start_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
                                 </p>
                               </div>
                               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -2633,6 +2643,44 @@ export default function AdvancedQuizPage() {
         </div>
       )}
 
+      {/* Absent Students Modal */}
+      {showAbsentModal && (() => {
+        const absentStudents = classroomStudents.filter(student => {
+          return !allAttemptsList.some(att => att.student_id === student.user_id);
+        });
+        return (
+          <div className="modal-overlay" onClick={() => setShowAbsentModal(false)}>
+            <div className="glass modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px', padding: '2rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                  ⚠️ Absent Students ({absentStudents.length})
+                </h3>
+                <button onClick={() => setShowAbsentModal(false)} className="btn-close" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.5rem', padding: 0 }}>&times;</button>
+              </div>
+              {absentStudents.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', textAlign: 'center', margin: '2rem 0' }}>All enrolled students have attended the exam! 🎉</p>
+              ) : (
+                <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'grid', gap: '0.75rem', paddingRight: '0.5rem' }}>
+                  {absentStudents.map(student => (
+                    <div key={student.user_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
+                      <div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{student.users?.name || 'Unknown Student'}</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>@{student.users?.username}</div>
+                      </div>
+                      {student.users?.reg_no && (
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', alignSelf: 'center' }}>
+                          Reg No: {student.users.reg_no}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+ 
       {/* ================= IN-SCREEN CUSTOM TOAST NOTIFICATIONS ================= */}
       {toast && (
         <div style={{

@@ -112,7 +112,7 @@ export default function AIEvaluatorDashboard() {
                     {sub.users?.name || 'Unknown Student'}
                   </h4>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    Submitted: {new Date(sub.submitted_at).toLocaleString()}
+                    Submitted: {new Date(sub.submitted_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
                   </p>
                 </div>
 

@@ -15,6 +15,8 @@ export default function AssignmentDetailsPage() {
   const [submissionsList, setSubmissionsList] = useState([]);
   const [submission, setSubmission] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [classroomStudents, setClassroomStudents] = useState([]);
+  const [showUnsubmittedModal, setShowUnsubmittedModal] = useState(false);
 
   // Uploading / Auto-Grading statuses: null | 'uploading' | 'extracting' | 'evaluating' | 'done' | 'failed'
   const [gradingProgress, setGradingProgress] = useState(null);
@@ -113,6 +115,17 @@ export default function AssignmentDetailsPage() {
           .eq('assignment_id', assignmentId)
           .order('submitted_at', { ascending: false });
         setSubmissionsList(subs || []);
+
+        // Fetch classroom members (students)
+        const { data: membersData } = await supabase
+          .from('classroom_members')
+          .select('*, users!user_id(id, name, username, reg_no, role)')
+          .eq('classroom_id', assign.classroom_id);
+          
+        if (membersData) {
+          const students = membersData.filter(m => m.users?.role === 'Student' || m.users?.role === 'Teaching Assistant' || m.users?.role === 'Research Scholar' || m.users?.role === 'Mentor');
+          setClassroomStudents(students);
+        }
       } else {
         // Student: load their own submission if already uploaded
         const { data: sub } = await supabase
@@ -457,7 +470,7 @@ export default function AssignmentDetailsPage() {
             <div>
               <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)' }}>DEADLINE</span>
               <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)' }}>
-                {new Date(assignment?.deadline).toLocaleString()}
+                {new Date(assignment?.deadline).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
               </span>
             </div>
           </div>
@@ -484,13 +497,22 @@ export default function AssignmentDetailsPage() {
              <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>📥 Student Submissions</h3>
-                <button
-                  onClick={handleDownloadExcel}
-                  className="btn btn-secondary"
-                  style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}
-                >
-                  📊 Export Grades
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <button
+                    onClick={handleDownloadExcel}
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}
+                  >
+                    📊 Export Grades
+                  </button>
+                  <button
+                    onClick={() => setShowUnsubmittedModal(true)}
+                    className="btn btn-primary"
+                    style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}
+                  >
+                    ⚠️ Unsubmitted Students
+                  </button>
+                </div>
               </div>
               {submissionsList.length === 0 ? (
                 <div className="glass card" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
@@ -911,6 +933,44 @@ export default function AssignmentDetailsPage() {
           </div>
         </div>
       )}
+
+      {/* Unsubmitted Students Modal */}
+      {showUnsubmittedModal && (() => {
+        const unsubmittedStudents = classroomStudents.filter(student => {
+          return !submissionsList.some(sub => sub.student_id === student.user_id);
+        });
+        return (
+          <div className="modal-overlay" onClick={() => setShowUnsubmittedModal(false)}>
+            <div className="glass modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px', padding: '2rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                  ⚠️ Unsubmitted Students ({unsubmittedStudents.length})
+                </h3>
+                <button onClick={() => setShowUnsubmittedModal(false)} className="btn-close" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.5rem', padding: 0 }}>&times;</button>
+              </div>
+              {unsubmittedStudents.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', textAlign: 'center', margin: '2rem 0' }}>All enrolled students have submitted the assignment! 🎉</p>
+              ) : (
+                <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'grid', gap: '0.75rem', paddingRight: '0.5rem' }}>
+                  {unsubmittedStudents.map(student => (
+                    <div key={student.user_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
+                      <div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{student.users?.name || 'Unknown Student'}</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>@{student.users?.username}</div>
+                      </div>
+                      {student.users?.reg_no && (
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', alignSelf: 'center' }}>
+                          Reg No: {student.users.reg_no}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {toast && (
         <div style={{

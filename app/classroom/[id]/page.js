@@ -48,6 +48,14 @@ export default function ClassroomPage() {
   const [deleteQuizTargetId, setDeleteQuizTargetId] = useState(null);
   const [deleteThreadTargetId, setDeleteThreadTargetId] = useState(null);
 
+  const toIndianISOTime = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const istOffset = 330 * 60 * 1000; 
+    const istTime = new Date(date.getTime() + istOffset);
+    return istTime.toISOString().slice(0, 16);
+  };
+
   const triggerToast = (title, body) => {
     setToast({ title, body });
     setTimeout(() => {
@@ -485,8 +493,8 @@ export default function ClassroomPage() {
           creator_id: user.id,
           is_public: false,
           type: testType,
-          scheduled_start: quizScheduledStart ? new Date(quizScheduledStart).toISOString() : null,
-          scheduled_end: quizScheduledEnd ? new Date(quizScheduledEnd).toISOString() : null
+          scheduled_start: quizScheduledStart ? new Date(quizScheduledStart + '+05:30').toISOString() : null,
+          scheduled_end: quizScheduledEnd ? new Date(quizScheduledEnd + '+05:30').toISOString() : null
         })
         .select()
         .single();
@@ -634,8 +642,8 @@ export default function ClassroomPage() {
       setEditQuizTitle(quizItem.title);
       setEditQuizDuration(quizItem.duration_minutes);
       setEditQuizMaxMarks(quizItem.max_marks || 0);
-      setEditQuizStart(quizItem.scheduled_start || '');
-      setEditQuizEnd(quizItem.scheduled_end || '');
+      setEditQuizStart(toIndianISOTime(quizItem.scheduled_start));
+      setEditQuizEnd(toIndianISOTime(quizItem.scheduled_end));
       setEditQuizShuffle(quizItem.shuffle_questions || false);
       setEditQuizNegative(quizItem.negative_marking || false);
       setShowEditQuizModal(true);
@@ -652,8 +660,8 @@ export default function ClassroomPage() {
           title: editQuizTitle,
           duration_minutes: parseInt(editQuizDuration, 10),
           max_marks: parseInt(editQuizMaxMarks, 10),
-          scheduled_start: editQuizStart || null,
-          scheduled_end: editQuizEnd || null,
+          scheduled_start: editQuizStart ? new Date(editQuizStart + '+05:30').toISOString() : null,
+          scheduled_end: editQuizEnd ? new Date(editQuizEnd + '+05:30').toISOString() : null,
           shuffle_questions: editQuizShuffle,
           negative_marking: editQuizNegative
         })
@@ -683,8 +691,8 @@ export default function ClassroomPage() {
         title: editQuizTitle,
         duration_minutes: parseInt(editQuizDuration, 10),
         max_marks: parseInt(editQuizMaxMarks, 10),
-        scheduled_start: editQuizStart || null,
-        scheduled_end: editQuizEnd || null,
+        scheduled_start: editQuizStart ? new Date(editQuizStart + '+05:30').toISOString() : null,
+        scheduled_end: editQuizEnd ? new Date(editQuizEnd + '+05:30').toISOString() : null,
         shuffle_questions: editQuizShuffle,
         negative_marking: editQuizNegative
       } : q));
@@ -823,7 +831,7 @@ export default function ClassroomPage() {
                       <div>
                         <h4 style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{assign.title}</h4>
                         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                          Due: {new Date(assign.deadline).toLocaleString()}
+                          Due: {new Date(assign.deadline).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
                         </p>
                         {submissionsCounts[assign.id] !== undefined && (
                           <p style={{ fontSize: '0.75rem', fontWeight: 650, color: 'var(--color-primary)', marginTop: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>

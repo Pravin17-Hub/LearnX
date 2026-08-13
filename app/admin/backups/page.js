@@ -412,7 +412,7 @@ export default function AdminBackupsPage() {
                         File: {b.filename}
                       </p>
                       <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
-                        Date: {new Date(b.createdAt).toLocaleString()} • Size: {(b.sizeBytes / 1024).toFixed(2)} KB
+                        Date: {new Date(b.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} • Size: {(b.sizeBytes / 1024).toFixed(2)} KB
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
