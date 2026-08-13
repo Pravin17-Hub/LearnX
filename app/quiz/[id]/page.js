@@ -43,6 +43,7 @@ export default function AdvancedQuizPage() {
   // Active attempt and instruction state
   const [activeAttempt, setActiveAttempt] = useState(null);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [visibleWarningCount, setVisibleWarningCount] = useState(0);
   const [completedStudentsCount, setCompletedStudentsCount] = useState(0);
 
   // In-Screen Custom Popups / Alerts & Modals
@@ -223,6 +224,7 @@ export default function AdvancedQuizPage() {
 
     examStarted.current = true;
     securityViolationCount.current = 0;
+    setVisibleWarningCount(0);
     isWindowFocused.current = true;
     trustedRadioChecks.current = {};
     isGracePeriod.current = true;
@@ -680,6 +682,7 @@ export default function AdvancedQuizPage() {
     if (!examStarted.current || isGracePeriod.current || isWarningModalOpen.current) return;
 
     securityViolationCount.current += 1;
+    setVisibleWarningCount(securityViolationCount.current);
     setWarningViolationType(reason);
 
     if (securityViolationCount.current <= 4) {
@@ -1083,6 +1086,7 @@ export default function AdvancedQuizPage() {
 
       setActiveAttempt(attempt);
       securityViolationCount.current = 0;
+      setVisibleWarningCount(0);
       enterFullscreen();
       setPhase('playing');
       if (typeof window !== 'undefined') {
@@ -2390,9 +2394,11 @@ export default function AdvancedQuizPage() {
           background: 'rgba(15, 23, 42, 0.65)',
           backdropFilter: 'blur(8px)',
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'center',
           zIndex: 10000,
+          overflowY: 'auto',
+          padding: '2.5rem 1rem',
         }}>
           <div className="glass card animate-fade-in" style={{
             maxWidth: '600px',
@@ -2401,7 +2407,8 @@ export default function AdvancedQuizPage() {
             textAlign: 'left',
             boxShadow: 'var(--shadow-lg)',
             border: '2px solid var(--border-color)',
-            background: '#FFFFFF'
+            background: '#FFFFFF',
+            margin: 'auto',
           }}>
             <span style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem', textAlign: 'center' }}>📝</span>
             <h3 style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '1.5rem', textAlign: 'center' }}>
@@ -2417,6 +2424,7 @@ export default function AdvancedQuizPage() {
                 <li>❌ Exiting full-screen mode</li>
                 <li>❌ Switching browser tabs or applications</li>
                 <li>❌ Losing window focus or clicking outside the exam</li>
+                <li>❌ Selecting or highlighting exam text (more than 10 characters)</li>
                 <li>❌ Copy-pasting, dragging, dropping, or auto-filling answers</li>
                 <li>❌ Keyboard shortcuts (Alt, Meta/Win, Ctrl+C, Ctrl+V, Ctrl+X, F12, Inspect Element)</li>
                 <li>❌ Right-clicking to open context menus</li>
@@ -2462,7 +2470,7 @@ export default function AdvancedQuizPage() {
               Violation detected: <strong style={{ color: '#dc2626' }}>{warningViolationType}</strong>.
             </p>
             <p style={{ color: 'var(--text-primary)', fontSize: '1.15rem', fontWeight: 700, marginBottom: '1rem' }}>
-              This is warning {securityViolationCount.current} of 4.
+              This is warning {visibleWarningCount} of 4.
             </p>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '2rem' }}>
               Reaching 5 violations will trigger immediate automatic submission and termination.

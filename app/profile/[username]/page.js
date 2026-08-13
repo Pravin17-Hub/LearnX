@@ -435,8 +435,8 @@ export default function PublicProfilePage() {
 
       {/* EDIT PROFILE MODAL */}
       {isEditing && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass card modal-content" style={{ maxWidth: '500px', width: '100%', padding: '2rem', background: '#FFFFFF' }}>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 100, padding: '2rem 1rem', overflowY: 'auto' }}>
+          <div className="glass card modal-content" style={{ maxWidth: '500px', width: '100%', padding: '2rem', background: '#FFFFFF', margin: 'auto' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>✏️ Edit Profile Info</h3>
             <form onSubmit={handleSaveProfile} style={{ display: 'grid', gap: '1.2rem' }}>
               <div>
@@ -481,8 +481,8 @@ export default function PublicProfilePage() {
 
       {/* SHARE STUDY NOTE MODAL */}
       {isUploading && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass card modal-content" style={{ maxWidth: '500px', width: '100%', padding: '2rem', background: '#FFFFFF' }}>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 100, padding: '2rem 1rem', overflowY: 'auto' }}>
+          <div className="glass card modal-content" style={{ maxWidth: '500px', width: '100%', padding: '2rem', background: '#FFFFFF', margin: 'auto' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>📝 Share Note / Material</h3>
             <form onSubmit={handleUploadNote} style={{ display: 'grid', gap: '1.2rem' }}>
               <div>
