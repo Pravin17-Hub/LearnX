@@ -392,24 +392,59 @@ export default function AssignmentDetailsPage() {
   };
 
   const handleDownloadExcel = () => {
-    if (!submissionsList || submissionsList.length === 0) {
-      triggerToast('Notice', 'No submissions available to download.');
-      return;
-    }
+    const rows = [];
+
+    // Map classroom students
+    classroomStudents.forEach(student => {
+      const u = student.users;
+      if (!u) return;
+
+      const sub = submissionsList.find(s => s.student_id === u.id);
+      const reg = (u.reg_no || 'N/A').replace(/"/g, '""');
+      const name = (u.name || 'Unknown').replace(/\r?\n|\r/g, ' ').replace(/"/g, '""');
+      const maxMarks = assignment?.max_marks || 10;
+
+      if (sub) {
+        const marks = sub.teacher_marks !== null ? sub.teacher_marks : (sub.ai_marks || 0);
+        const aiScore = sub.ai_marks || 0;
+        const override = sub.teacher_marks !== null ? sub.teacher_marks : 'None';
+        const status = (sub.review_status || 'PENDING').replace(/"/g, '""');
+        rows.push({
+          reg,
+          name,
+          marks,
+          maxMarks,
+          aiScore,
+          override,
+          status,
+          isAbsent: false
+        });
+      } else {
+        rows.push({
+          reg,
+          name,
+          marks: 'ABSENT',
+          maxMarks,
+          aiScore: 0,
+          override: '',
+          status: '⚠️ ABSENT (No Submission)',
+          isAbsent: true
+        });
+      }
+    });
+
+    // Sort rows, putting absentees at the bottom
+    rows.sort((a, b) => {
+      if (a.isAbsent !== b.isAbsent) {
+        return a.isAbsent ? 1 : -1;
+      }
+      return a.reg.localeCompare(b.reg, undefined, { numeric: true, sensitivity: 'base' });
+    });
 
     const headers = ['Register Number', 'Student Name', 'Marks Obtained', 'Max Marks', 'AI Score', 'Teacher Override', 'Review Status'];
     const csvRows = [
       headers.join(','),
-      ...submissionsList.map(sub => {
-        const reg = (sub.users?.reg_no || 'N/A').replace(/"/g, '""');
-        const name = (sub.users?.name || 'Unknown').replace(/\r?\n|\r/g, ' ').replace(/"/g, '""');
-        const marks = sub.teacher_marks !== null ? sub.teacher_marks : (sub.ai_marks || 0);
-        const maxMarks = assignment.max_marks;
-        const aiScore = sub.ai_marks || 0;
-        const override = sub.teacher_marks !== null ? sub.teacher_marks : 'None';
-        const status = (sub.review_status || 'PENDING').replace(/"/g, '""');
-        return `"${reg}","${name}",${marks},${maxMarks},${aiScore},"${override}","${status}"`;
-      })
+      ...rows.map(r => `"${r.reg}","${r.name}",${typeof r.marks === 'number' ? r.marks : `"${r.marks}"`},${r.maxMarks},${r.aiScore},"${r.override}","${r.status}"`)
     ];
 
     const csvContent = "\uFEFF" + csvRows.join('\n');

@@ -735,30 +735,79 @@ export default function AdvancedQuizPage() {
   };
 
   const handleDownloadQuizExcel = () => {
-    if (!allAttemptsList || allAttemptsList.length === 0) {
-      triggerToast('Notice', 'No student attempts to download.');
-      return;
-    }
+    // Gather all rows
+    const rows = [];
 
-    const completedAttempts = allAttemptsList.filter(att => att.violation_reason !== 'IN_PROGRESS');
+    // Map classroom students
+    classroomStudents.forEach(student => {
+      const u = student.users;
+      if (!u) return;
 
-    completedAttempts.sort((a, b) => {
-      const regA = a.users?.reg_no || '';
-      const regB = b.users?.reg_no || '';
-      return regA.localeCompare(regB, undefined, { numeric: true, sensitivity: 'base' });
+      // Find completed attempt
+      const att = allAttemptsList.find(a => a.student_id === u.id && a.violation_reason !== 'IN_PROGRESS');
+      const ipAtt = allAttemptsList.find(a => a.student_id === u.id && a.violation_reason === 'IN_PROGRESS');
+
+      const reg = (u.reg_no || 'N/A').replace(/"/g, '""');
+      const name = (u.name || 'Unknown').replace(/\r?\n|\r/g, ' ').replace(/"/g, '""');
+      const maxScore = quiz?.max_marks || 40;
+
+      if (att) {
+        rows.push({
+          reg,
+          name,
+          score: att.score,
+          maxScore: att.max_score || maxScore,
+          status: (att.violation_reason || 'Completed').replace(/"/g, '""'),
+          isAbsent: false
+        });
+      } else if (ipAtt) {
+        rows.push({
+          reg,
+          name,
+          score: 'ABSENT',
+          maxScore,
+          status: '⚠️ ABSENT (Started but Incomplete)',
+          isAbsent: true
+        });
+      } else {
+        rows.push({
+          reg,
+          name,
+          score: 'ABSENT',
+          maxScore,
+          status: '⚠️ ABSENT (Not Attempted)',
+          isAbsent: true
+        });
+      }
     });
 
-    const headers = ['Register Number', 'Student Name', 'Marks Obtained', 'Max Marks', 'Violation Reason'];
+    // Map completed guest attempts (who are not classroom students)
+    const guestAttempts = allAttemptsList.filter(att => !att.student_id && att.violation_reason !== 'IN_PROGRESS');
+    guestAttempts.forEach(att => {
+      const reg = 'Guest/N/A';
+      const name = (att.guest_name || 'Guest User').replace(/\r?\n|\r/g, ' ').replace(/"/g, '""');
+      rows.push({
+        reg,
+        name,
+        score: att.score,
+        maxScore: att.max_score || quiz?.max_marks || 40,
+        status: (att.violation_reason || 'Completed').replace(/"/g, '""'),
+        isAbsent: false
+      });
+    });
+
+    // Sort rows by Register Number, putting absentees at the bottom
+    rows.sort((a, b) => {
+      if (a.isAbsent !== b.isAbsent) {
+        return a.isAbsent ? 1 : -1;
+      }
+      return a.reg.localeCompare(b.reg, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    const headers = ['Register Number', 'Student Name', 'Marks Obtained', 'Max Marks', 'Status / Violation Reason'];
     const csvRows = [
       headers.join(','),
-      ...completedAttempts.map(att => {
-        const reg = (att.users?.reg_no || 'Guest/N/A').replace(/"/g, '""');
-        const name = (att.users?.name || att.guest_name || 'Guest User').replace(/\r?\n|\r/g, ' ').replace(/"/g, '""');
-        const score = att.score;
-        const maxScore = att.max_score || quiz?.max_marks || 0;
-        const reason = (att.violation_reason || 'None').replace(/"/g, '""');
-        return `"${reg}","${name}",${score},${maxScore},"${reason}"`;
-      })
+      ...rows.map(r => `"${r.reg}","${r.name}",${typeof r.score === 'number' ? r.score : `"${r.score}"`},${r.maxScore},"${r.status}"`)
     ];
 
     const csvContent = "\uFEFF" + csvRows.join('\n');
@@ -2646,7 +2695,8 @@ export default function AdvancedQuizPage() {
       {/* Absent Students Modal */}
       {showAbsentModal && (() => {
         const absentStudents = classroomStudents.filter(student => {
-          return !allAttemptsList.some(att => att.student_id === student.user_id);
+          const completedAttempt = allAttemptsList.find(att => att.student_id === student.user_id && att.violation_reason !== 'IN_PROGRESS');
+          return !completedAttempt;
         });
         return (
           <div className="modal-overlay" onClick={() => setShowAbsentModal(false)}>
@@ -2661,19 +2711,28 @@ export default function AdvancedQuizPage() {
                 <p style={{ color: 'var(--text-muted)', textAlign: 'center', margin: '2rem 0' }}>All enrolled students have attended the exam! 🎉</p>
               ) : (
                 <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'grid', gap: '0.75rem', paddingRight: '0.5rem' }}>
-                  {absentStudents.map(student => (
-                    <div key={student.user_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                      <div>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{student.users?.name || 'Unknown Student'}</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>@{student.users?.username}</div>
+                  {absentStudents.map(student => {
+                    const hasInProgress = allAttemptsList.some(att => att.student_id === student.user_id && att.violation_reason === 'IN_PROGRESS');
+                    return (
+                      <div key={student.user_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
+                        <div>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{student.users?.name || 'Unknown Student'}</div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            @{student.users?.username} • {hasInProgress ? (
+                              <span style={{ color: '#d97706', fontWeight: 600 }}>Started but Incomplete</span>
+                            ) : (
+                              <span style={{ color: '#ef4444', fontWeight: 600 }}>Not Attempted</span>
+                            )}
+                          </div>
+                        </div>
+                        {student.users?.reg_no && (
+                          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', alignSelf: 'center' }}>
+                            Reg No: {student.users.reg_no}
+                          </span>
+                        )}
                       </div>
-                      {student.users?.reg_no && (
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', alignSelf: 'center' }}>
-                          Reg No: {student.users.reg_no}
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
