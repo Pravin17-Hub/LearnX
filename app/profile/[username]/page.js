@@ -8,7 +8,7 @@ import Navbar from '@/components/Navbar';
 export default function PublicProfilePage() {
   const params = useParams();
   const router = useRouter();
-  const targetUsername = params.username;
+  const targetUsername = decodeURIComponent(params.username || '');
 
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);

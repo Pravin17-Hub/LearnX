@@ -576,13 +576,26 @@ export default function ClassroomPage() {
   const handleRemoveStudent = async (studentId) => {
     if (!confirm("Are you sure you want to remove this student from the classroom?")) return;
     try {
-      const { error } = await supabase
-        .from('classroom_members')
-        .delete()
-        .eq('classroom_id', classroomId)
-        .eq('user_id', studentId);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      if (error) throw error;
+      const res = await fetch('/api/classroom/remove-member', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          classroomId: Number(classroomId),
+          studentId: studentId
+        })
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || 'Failed to remove member');
+      }
+
       setMembers(prev => prev.filter(m => m.user_id !== studentId));
       triggerToast('Success', 'Student removed from classroom.');
     } catch (err) {
