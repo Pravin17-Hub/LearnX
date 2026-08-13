@@ -220,7 +220,10 @@ export default function AdvancedQuizPage() {
 
   // Poll attempt queue status and position
   useEffect(() => {
-    if (phase !== 'result' || !currentAttempt || currentAttempt.score !== null) return;
+    const currentFeedbackStr = currentAttempt?.ai_feedback || '';
+    const isCurrentPending = currentFeedbackStr.includes('"status":"queued"') || currentFeedbackStr.includes('"status":"grading"');
+    
+    if (phase !== 'result' || !currentAttempt || !isCurrentPending) return;
 
     let interval;
     const checkStatus = async () => {
@@ -233,7 +236,10 @@ export default function AdvancedQuizPage() {
 
         if (error) throw error;
         
-        if (latestAttempt.score !== null) {
+        const fbStr = latestAttempt.ai_feedback || '';
+        const isLatestPending = fbStr.includes('"status":"queued"') || fbStr.includes('"status":"grading"');
+        
+        if (!isLatestPending) {
           setCurrentAttempt(latestAttempt);
           setPastAttempt(latestAttempt);
           try {
@@ -249,8 +255,7 @@ export default function AdvancedQuizPage() {
           .from('quiz_attempts')
           .select('*', { count: 'exact', head: true })
           .eq('quiz_id', quizId)
-          .is('score', null)
-          .neq('violation_reason', 'IN_PROGRESS')
+          .like('ai_feedback', '%"status":"queued"%')
           .lt('id', currentAttempt.id);
 
         if (!countError) {
@@ -1394,7 +1399,7 @@ export default function AdvancedQuizPage() {
         }
       }
 
-      const scoreToSave = hasTheory ? null : (finalScore < 0 ? 0 : finalScore);
+      const scoreToSave = hasTheory ? 0 : (finalScore < 0 ? 0 : finalScore);
       const aiFeedbackToSave = hasTheory 
         ? JSON.stringify({ status: 'queued', queued_at: new Date().toISOString(), feedbackMap })
         : JSON.stringify(feedbackMap);
@@ -1444,7 +1449,7 @@ export default function AdvancedQuizPage() {
       }
 
       // 4. Update student points (only if graded instantly)
-      if (user && !violationReasonVal && scoreToSave !== null) {
+      if (user && !violationReasonVal && !hasTheory) {
         await supabase.rpc('increment_score', {
           user_id: user.id,
           points: scoreToSave * 5 + 5
