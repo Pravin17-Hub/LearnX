@@ -3,7 +3,10 @@ import { NextResponse } from 'next/server';
 import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
 import { supabase } from '@/lib/supabase';
-import { addToQueue } from '@/lib/evaluateQueue';
+import { addToQueue, startBackgroundWorker } from '@/lib/evaluateQueue';
+
+// Start the background worker process if not already running
+startBackgroundWorker();
 
 export async function POST(request) {
   try {

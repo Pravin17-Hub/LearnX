@@ -39,6 +39,7 @@ export default function AdvancedQuizPage() {
   // Result Phase state
   const [currentAttempt, setCurrentAttempt] = useState(null);
   const [feedbackDetails, setFeedbackDetails] = useState({});
+  const [queuePosition, setQueuePosition] = useState(null);
 
   // Active attempt and instruction state
   const [activeAttempt, setActiveAttempt] = useState(null);
@@ -216,6 +217,63 @@ export default function AdvancedQuizPage() {
 
     return () => clearInterval(interval);
   }, [phase, activeAttempt]);
+
+  // Poll attempt queue status and position
+  useEffect(() => {
+    if (phase !== 'result' || !currentAttempt || currentAttempt.score !== null) return;
+
+    let interval;
+    const checkStatus = async () => {
+      try {
+        const { data: latestAttempt, error } = await supabase
+          .from('quiz_attempts')
+          .select('*')
+          .eq('id', currentAttempt.id)
+          .single();
+
+        if (error) throw error;
+        
+        if (latestAttempt.score !== null) {
+          setCurrentAttempt(latestAttempt);
+          setPastAttempt(latestAttempt);
+          try {
+            setFeedbackDetails(JSON.parse(latestAttempt.ai_feedback || '{}'));
+          } catch (e) {
+            setFeedbackDetails({});
+          }
+          clearInterval(interval);
+          return;
+        }
+
+        const { count, error: countError } = await supabase
+          .from('quiz_attempts')
+          .select('*', { count: 'exact', head: true })
+          .eq('quiz_id', quizId)
+          .is('score', null)
+          .neq('violation_reason', 'IN_PROGRESS')
+          .lt('id', currentAttempt.id);
+
+        if (!countError) {
+          setQueuePosition(count);
+        }
+      } catch (err) {
+        console.error('Error polling attempt queue status:', err.message);
+      }
+    };
+
+    checkStatus();
+    
+    // Ping to wake up background queue worker on server
+    fetch('/api/evaluate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ping: true })
+    }).catch(() => {});
+
+    interval = setInterval(checkStatus, 5000);
+
+    return () => clearInterval(interval);
+  }, [phase, currentAttempt, quizId]);
 
   // --- SECURE EXAM CONTROLS LIFE-CYCLE ---
   useEffect(() => {
@@ -1316,12 +1374,11 @@ export default function AdvancedQuizPage() {
         }
       }
 
-      // 2. Grade Theory questions via serverless AI
+      // 2. Grade Theory questions via serverless AI (Decoupled to backend Queue)
       const theoryQuestions = questionsRef.current.filter(q => q.question_type !== 'MCQ');
+      const hasTheory = theoryQuestions.length > 0;
       
-      if (theoryQuestions.length > 0) {
-        setSubmissionProgress('grading_theory');
-        
+      if (hasTheory) {
         for (const q of theoryQuestions) {
           const studentAns = answersRef.current[q.id] || '';
           const itemFeedback = {
@@ -1329,60 +1386,18 @@ export default function AdvancedQuizPage() {
             questionType: q.question_type,
             studentAnswer: studentAns,
             maxMarks: q.points,
-            score: 0,
-            feedback: '',
+            score: null,
+            feedback: studentAns.trim() !== '' ? 'Queued for AI evaluation...' : (violationReasonVal ? 'No answer submitted before secure environment termination.' : 'No answer submitted.'),
             correct: false
           };
-
-          if (studentAns.trim() !== '') {
-            try {
-              let refAnswer = q.correct_answer_json;
-              if (!refAnswer || refAnswer.trim() === '' || refAnswer === '[]') {
-                refAnswer = 'A logical and concise academic explanation.';
-              }
-
-              const res = await fetch('/api/evaluate', {
-                method: 'POST',
-                headers: { 
-                  'Content-Type': 'application/json',
-                  ...authHeaders
-                },
-                body: JSON.stringify({
-                  question: q.question_text,
-                  answerKey: refAnswer,
-                  rubric: 'Assess grammar, reasoning, terminology accuracy, and completion.',
-                  maxMarks: q.points,
-                  studentAnswer: studentAns
-                })
-              });
-
-              if (res.ok) {
-                const aiResult = await res.json();
-                const score = Number(aiResult.score) || 0;
-                finalScore += score;
-                itemFeedback.score = score;
-                itemFeedback.feedback = aiResult.feedback || 'AI evaluated successfully.';
-                itemFeedback.ai_response = aiResult;
-                if (score >= q.points * 0.75) {
-                  itemFeedback.correct = true;
-                }
-              } else {
-                throw new Error('AI service error');
-              }
-            } catch (err) {
-              const fallback = Math.max(1, Math.floor(q.points / 2));
-              finalScore += fallback;
-              itemFeedback.score = fallback;
-              itemFeedback.feedback = 'AI grader was busy. Awarded half-marks for completion.';
-            }
-          } else {
-            itemFeedback.feedback = violationReasonVal ? 'No answer submitted before secure environment termination.' : 'No answer submitted.';
-          }
           feedbackMap[q.id] = itemFeedback;
         }
       }
 
-      if (finalScore < 0) finalScore = 0;
+      const scoreToSave = hasTheory ? null : (finalScore < 0 ? 0 : finalScore);
+      const aiFeedbackToSave = hasTheory 
+        ? JSON.stringify({ status: 'queued', queued_at: new Date().toISOString(), feedbackMap })
+        : JSON.stringify(feedbackMap);
 
       // 3. Save Attempt to Supabase
       setSubmissionProgress('saving');
@@ -1392,10 +1407,10 @@ export default function AdvancedQuizPage() {
         const { data: updatedAttempt, error: attemptError } = await supabase
           .from('quiz_attempts')
           .update({
-            score: finalScore,
+            score: scoreToSave,
             max_score: totalMaxMarks,
             answers_json: JSON.stringify(answersRef.current),
-            ai_feedback: JSON.stringify(feedbackMap),
+            ai_feedback: aiFeedbackToSave,
             auto_saved: isAutoSaved,
             violation_reason: violationReasonVal,
             submit_time: new Date().toISOString()
@@ -1413,10 +1428,10 @@ export default function AdvancedQuizPage() {
             quiz_id: quizId,
             student_id: user?.id || null,
             guest_name: user ? null : guestName.trim(),
-            score: finalScore,
+            score: scoreToSave,
             max_score: totalMaxMarks,
             answers_json: JSON.stringify(answersRef.current),
-            ai_feedback: JSON.stringify(feedbackMap),
+            ai_feedback: aiFeedbackToSave,
             auto_saved: isAutoSaved,
             violation_reason: violationReasonVal,
             submit_time: new Date().toISOString()
@@ -1428,13 +1443,20 @@ export default function AdvancedQuizPage() {
         attempt = insertedAttempt;
       }
 
-      // 4. Update student points
-      if (user && !violationReasonVal) {
+      // 4. Update student points (only if graded instantly)
+      if (user && !violationReasonVal && scoreToSave !== null) {
         await supabase.rpc('increment_score', {
           user_id: user.id,
-          points: finalScore * 5 + 5
+          points: scoreToSave * 5 + 5
         });
       }
+
+      // Trigger background queue worker wake-up on server
+      fetch('/api/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ ping: true })
+      }).catch(() => {});
 
       setCurrentAttempt(attempt);
       setPastAttempt(attempt);
@@ -2355,8 +2377,55 @@ export default function AdvancedQuizPage() {
           </div>
         )}
 
-        {/* PHASE 3: DETAILED RESULT VIEW */}
-        {phase === 'result' && currentAttempt && (
+        {/* PHASE 3A: QUEUE WAIT SCREEN */}
+        {phase === 'result' && currentAttempt && currentAttempt.score === null && (
+          <div style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
+            <div className="glass card" style={{ padding: '3rem 2rem' }}>
+              <span style={{ fontSize: '3.5rem' }}>⏳</span>
+              <h2 style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '1rem', marginBottom: '0.5rem' }}>
+                Answers Submitted Successfully!
+              </h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', marginBottom: '1.5rem' }}>
+                Your exam has been recorded. We are currently performing the AI evaluation.
+              </p>
+
+              <div style={{ background: 'rgba(99, 102, 241, 0.05)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '1.5rem', marginBottom: '2rem' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '0.5rem' }}>
+                  Queue Status
+                </h4>
+                <p style={{ fontSize: '1.35rem', fontWeight: 800, margin: '0.2rem 0' }}>
+                  {queuePosition !== null ? `Position in Queue: #${queuePosition + 1}` : 'Calculating position...'}
+                </p>
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                  Estimated Wait Time: {queuePosition !== null ? (
+                    queuePosition === 0 ? 'Evaluating your answers now...' : `${Math.floor(((queuePosition + 1) * 22) / 60)}m ${((queuePosition + 1) * 22) % 60}s`
+                  ) : 'Estimating...'}
+                </p>
+              </div>
+
+              <div className="alert alert-info" style={{ textAlign: 'left', marginBottom: '2rem', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '1rem', borderRadius: '8px' }}>
+                ℹ️ <strong>You can safely close this screen now.</strong> The AI is processing the queue sequentially on the server. Your answers are safe and will be evaluated. If you return to this page later, your marks will be displayed here.
+              </div>
+
+              <button 
+                onClick={() => {
+                  if (quiz?.classroom_id) {
+                    router.push(`/classroom/${quiz.classroom_id}?tab=quizzes`);
+                  } else {
+                    router.push('/');
+                  }
+                }}
+                className="btn btn-secondary"
+                style={{ padding: '0.8rem 2rem', fontWeight: 'bold' }}
+              >
+                Go to Classroom
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* PHASE 3B: DETAILED RESULT VIEW */}
+        {phase === 'result' && currentAttempt && currentAttempt.score !== null && (
           <div style={{ maxWidth: '800px', margin: '0 auto' }}>
             
             {/* Score circle header card */}
