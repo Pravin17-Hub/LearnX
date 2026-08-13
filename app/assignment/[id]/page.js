@@ -427,17 +427,14 @@ export default function AssignmentDetailsPage() {
           maxMarks,
           aiScore: 0,
           override: '',
-          status: 'ABSENT (No Submission)',
+          status: 'Not Attempted',
           isAbsent: true
         });
       }
     });
 
-    // Sort rows, putting absentees at the bottom
+    // Sort rows strictly by Register Number, keeping absentees in-between
     rows.sort((a, b) => {
-      if (a.isAbsent !== b.isAbsent) {
-        return a.isAbsent ? 1 : -1;
-      }
       return a.reg.localeCompare(b.reg, undefined, { numeric: true, sensitivity: 'base' });
     });
 

@@ -757,7 +757,7 @@ export default function AdvancedQuizPage() {
           name,
           score: att.score,
           maxScore: att.max_score || maxScore,
-          status: att.violation_reason || 'Completed',
+          status: att.violation_reason || 'Attempted',
           isAbsent: false
         });
       } else if (ipAtt) {
@@ -766,7 +766,7 @@ export default function AdvancedQuizPage() {
           name,
           score: 'ABSENT',
           maxScore,
-          status: 'ABSENT (Started but Incomplete)',
+          status: 'Absent',
           isAbsent: true
         });
       } else {
@@ -775,7 +775,7 @@ export default function AdvancedQuizPage() {
           name,
           score: 'ABSENT',
           maxScore,
-          status: 'ABSENT (Not Attempted)',
+          status: 'Not Attempted',
           isAbsent: true
         });
       }
@@ -789,16 +789,13 @@ export default function AdvancedQuizPage() {
         name: att.guest_name || 'Guest User',
         score: att.score,
         maxScore: att.max_score || quiz?.max_marks || 40,
-        status: att.violation_reason || 'Completed',
+        status: att.violation_reason || 'Attempted',
         isAbsent: false
       });
     });
 
-    // Sort rows by Register Number, putting absentees at the bottom
+    // Sort rows strictly by Register Number, keeping absentees in-between
     rows.sort((a, b) => {
-      if (a.isAbsent !== b.isAbsent) {
-        return a.isAbsent ? 1 : -1;
-      }
       return a.reg.localeCompare(b.reg, undefined, { numeric: true, sensitivity: 'base' });
     });
 
