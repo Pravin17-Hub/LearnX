@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
 import { supabase } from '@/lib/supabase';
+import { addToQueue } from '@/lib/evaluateQueue';
 
 export async function POST(request) {
   try {
@@ -172,7 +173,6 @@ Student Answer: ${studentAnswer}`;
       temperature: 0.0,
     };
 
-    const { addToQueue } = require('../../../lib/evaluateQueue');
     const parsedEvaluation = await addToQueue(systemPrompt, userContent);
     
     // Programmatically calculate total score and breakdown text in JS to ensure mathematical consistency
