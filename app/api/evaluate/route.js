@@ -36,8 +36,8 @@ export async function POST(request) {
       ocrModel = 'gemini-3.6-flash';
     } else if (process.env.GROQ_API_KEY && apiKey === process.env.GROQ_API_KEY) {
       apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
-      model = 'llama-3.3-70b-versatile';
-      ocrModel = 'qwen/qwen3.6-27b';
+      model = 'llama-3.1-8b-instant';
+      ocrModel = 'llama-3.1-8b-instant';
     }
 
     const host = request.headers.get('host') || 'localhost:3000';
@@ -195,7 +195,7 @@ Student Answer: ${studentAnswer}`;
         const fallbackUrl = fallbackIsGroq
           ? 'https://api.groq.com/openai/v1/chat/completions'
           : 'https://api.openai.com/v1/chat/completions';
-        const fallbackModel = fallbackIsGroq ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini';
+        const fallbackModel = fallbackIsGroq ? 'llama-3.1-8b-instant' : 'gpt-4o-mini';
 
         const fallbackRequestBody = {
           ...requestBody,
