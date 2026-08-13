@@ -400,15 +400,15 @@ export default function AssignmentDetailsPage() {
       if (!u) return;
 
       const sub = submissionsList.find(s => s.student_id === u.id);
-      const reg = (u.reg_no || 'N/A').replace(/"/g, '""');
-      const name = (u.name || 'Unknown').replace(/\r?\n|\r/g, ' ').replace(/"/g, '""');
+      const reg = u.reg_no || 'N/A';
+      const name = u.name || 'Unknown';
       const maxMarks = assignment?.max_marks || 10;
 
       if (sub) {
         const marks = sub.teacher_marks !== null ? sub.teacher_marks : (sub.ai_marks || 0);
         const aiScore = sub.ai_marks || 0;
         const override = sub.teacher_marks !== null ? sub.teacher_marks : 'None';
-        const status = (sub.review_status || 'PENDING').replace(/"/g, '""');
+        const status = sub.review_status || 'PENDING';
         rows.push({
           reg,
           name,
@@ -427,7 +427,7 @@ export default function AssignmentDetailsPage() {
           maxMarks,
           aiScore: 0,
           override: '',
-          status: '⚠️ ABSENT (No Submission)',
+          status: 'ABSENT (No Submission)',
           isAbsent: true
         });
       }
@@ -441,18 +441,67 @@ export default function AssignmentDetailsPage() {
       return a.reg.localeCompare(b.reg, undefined, { numeric: true, sensitivity: 'base' });
     });
 
-    const headers = ['Register Number', 'Student Name', 'Marks Obtained', 'Max Marks', 'AI Score', 'Teacher Override', 'Review Status'];
-    const csvRows = [
-      headers.join(','),
-      ...rows.map(r => `"${r.reg}","${r.name}",${typeof r.marks === 'number' ? r.marks : `"${r.marks}"`},${r.maxMarks},${r.aiScore},"${r.override}","${r.status}"`)
-    ];
+    // Generate Excel HTML Content with Red Highlighting
+    const htmlContent = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <!--[if gte mso 9]>
+        <xml>
+          <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+              <x:ExcelWorksheet>
+                <x:Name>Assignment Grades</x:Name>
+                <x:WorksheetOptions>
+                  <x:DisplayGridlines/>
+                </x:WorksheetOptions>
+              </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+          </x:ExcelWorkbook>
+        </xml>
+        <![endif]-->
+        <style>
+          table { border-collapse: collapse; font-family: Arial, sans-serif; }
+          th { background-color: #f2f2f2; font-weight: bold; border: 1px solid #dddddd; padding: 8px; text-align: left; }
+          td { border: 1px solid #dddddd; padding: 8px; text-align: left; }
+          .absent { background-color: #ffebeb; color: #d32f2f; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <thead>
+            <tr>
+              <th>Register Number</th>
+              <th>Student Name</th>
+              <th>Marks Obtained</th>
+              <th>Max Marks</th>
+              <th>AI Score</th>
+              <th>Teacher Override</th>
+              <th>Review Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr class="${r.isAbsent ? 'absent' : ''}">
+                <td>${r.reg}</td>
+                <td>${r.name}</td>
+                <td>${r.marks}</td>
+                <td>${r.maxMarks}</td>
+                <td>${r.aiScore}</td>
+                <td>${r.override}</td>
+                <td>${r.status}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
 
-    const csvContent = "\uFEFF" + csvRows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `${assignment.title.replace(/\s+/g, '_')}_grades.csv`);
+    link.setAttribute('download', `${assignment.title.replace(/\s+/g, '_')}_grades.xls`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -570,7 +619,6 @@ export default function AssignmentDetailsPage() {
                       }}
                     >
                       <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{sub.users?.name}</h4>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Submitted: {new Date(sub.submitted_at).toLocaleDateString()}</p>
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
                         <span className="badge badge-student" style={{ fontSize: '0.6rem' }}>

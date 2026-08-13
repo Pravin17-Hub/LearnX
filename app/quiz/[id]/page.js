@@ -747,8 +747,8 @@ export default function AdvancedQuizPage() {
       const att = allAttemptsList.find(a => a.student_id === u.id && a.violation_reason !== 'IN_PROGRESS');
       const ipAtt = allAttemptsList.find(a => a.student_id === u.id && a.violation_reason === 'IN_PROGRESS');
 
-      const reg = (u.reg_no || 'N/A').replace(/"/g, '""');
-      const name = (u.name || 'Unknown').replace(/\r?\n|\r/g, ' ').replace(/"/g, '""');
+      const reg = u.reg_no || 'N/A';
+      const name = u.name || 'Unknown';
       const maxScore = quiz?.max_marks || 40;
 
       if (att) {
@@ -757,7 +757,7 @@ export default function AdvancedQuizPage() {
           name,
           score: att.score,
           maxScore: att.max_score || maxScore,
-          status: (att.violation_reason || 'Completed').replace(/"/g, '""'),
+          status: att.violation_reason || 'Completed',
           isAbsent: false
         });
       } else if (ipAtt) {
@@ -766,7 +766,7 @@ export default function AdvancedQuizPage() {
           name,
           score: 'ABSENT',
           maxScore,
-          status: '⚠️ ABSENT (Started but Incomplete)',
+          status: 'ABSENT (Started but Incomplete)',
           isAbsent: true
         });
       } else {
@@ -775,7 +775,7 @@ export default function AdvancedQuizPage() {
           name,
           score: 'ABSENT',
           maxScore,
-          status: '⚠️ ABSENT (Not Attempted)',
+          status: 'ABSENT (Not Attempted)',
           isAbsent: true
         });
       }
@@ -784,14 +784,12 @@ export default function AdvancedQuizPage() {
     // Map completed guest attempts (who are not classroom students)
     const guestAttempts = allAttemptsList.filter(att => !att.student_id && att.violation_reason !== 'IN_PROGRESS');
     guestAttempts.forEach(att => {
-      const reg = 'Guest/N/A';
-      const name = (att.guest_name || 'Guest User').replace(/\r?\n|\r/g, ' ').replace(/"/g, '""');
       rows.push({
-        reg,
-        name,
+        reg: 'Guest/N/A',
+        name: att.guest_name || 'Guest User',
         score: att.score,
         maxScore: att.max_score || quiz?.max_marks || 40,
-        status: (att.violation_reason || 'Completed').replace(/"/g, '""'),
+        status: att.violation_reason || 'Completed',
         isAbsent: false
       });
     });
@@ -804,18 +802,63 @@ export default function AdvancedQuizPage() {
       return a.reg.localeCompare(b.reg, undefined, { numeric: true, sensitivity: 'base' });
     });
 
-    const headers = ['Register Number', 'Student Name', 'Marks Obtained', 'Max Marks', 'Status / Violation Reason'];
-    const csvRows = [
-      headers.join(','),
-      ...rows.map(r => `"${r.reg}","${r.name}",${typeof r.score === 'number' ? r.score : `"${r.score}"`},${r.maxScore},"${r.status}"`)
-    ];
+    // Generate Excel HTML Content with Red Highlighting
+    const htmlContent = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <!--[if gte mso 9]>
+        <xml>
+          <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+              <x:ExcelWorksheet>
+                <x:Name>Quiz Grades</x:Name>
+                <x:WorksheetOptions>
+                  <x:DisplayGridlines/>
+                </x:WorksheetOptions>
+              </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+          </x:ExcelWorkbook>
+        </xml>
+        <![endif]-->
+        <style>
+          table { border-collapse: collapse; font-family: Arial, sans-serif; }
+          th { background-color: #f2f2f2; font-weight: bold; border: 1px solid #dddddd; padding: 8px; text-align: left; }
+          td { border: 1px solid #dddddd; padding: 8px; text-align: left; }
+          .absent { background-color: #ffebeb; color: #d32f2f; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <thead>
+            <tr>
+              <th>Register Number</th>
+              <th>Student Name</th>
+              <th>Marks Obtained</th>
+              <th>Max Marks</th>
+              <th>Status / Violation Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr class="${r.isAbsent ? 'absent' : ''}">
+                <td>${r.reg}</td>
+                <td>${r.name}</td>
+                <td>${r.score}</td>
+                <td>${r.maxScore}</td>
+                <td>${r.status}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
 
-    const csvContent = "\uFEFF" + csvRows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `${quiz?.title?.replace(/\s+/g, '_') || 'test'}_grades.csv`);
+    link.setAttribute('download', `${quiz?.title?.replace(/\s+/g, '_') || 'test'}_grades.xls`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -2149,9 +2192,6 @@ export default function AdvancedQuizPage() {
                                     Completed
                                   </span>
                                 )}
-                                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                  Submitted/Last Saved: {new Date(att.submit_time || att.start_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                                </p>
                               </div>
                               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                 <span style={{ fontWeight: 700, color: 'var(--color-primary)', marginRight: '0.5rem' }}>

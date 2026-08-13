@@ -111,9 +111,6 @@ export default function AIEvaluatorDashboard() {
                   <h4 style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)' }}>
                     {sub.users?.name || 'Unknown Student'}
                   </h4>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    Submitted: {new Date(sub.submitted_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                  </p>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
