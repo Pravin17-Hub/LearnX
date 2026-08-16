@@ -251,15 +251,48 @@ export default function AdvancedQuizPage() {
           return;
         }
 
-        const { count, error: countError } = await supabase
+        const { data: attempts, error: fetchErr } = await supabase
           .from('quiz_attempts')
-          .select('*', { count: 'exact', head: true })
+          .select('*')
           .eq('quiz_id', quizId)
           .like('ai_feedback', '%"status":"queued"%')
-          .lt('id', currentAttempt.id);
+          .order('id', { ascending: true });
 
-        if (!countError) {
-          setQueuePosition(count);
+        if (fetchErr) throw fetchErr;
+
+        const ourIndex = (attempts || []).findIndex(att => att.id === currentAttempt.id);
+        
+        if (ourIndex !== -1) {
+          setQueuePosition(ourIndex);
+          
+          const { data: { session } } = await supabase.auth.getSession();
+          const token = session?.access_token;
+          const authHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+          if (ourIndex === 0) {
+            // We are first. Trigger our own evaluation on the server!
+            console.log('[Serverless Queue] We are first in queue. Evaluating ourselves...');
+            fetch('/api/evaluate-attempt', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...authHeaders },
+              body: JSON.stringify({ attemptId: currentAttempt.id })
+            }).catch(() => {});
+          } else {
+            // We are waiting. Check if the attempt at index 0 has timed out (offline student)
+            const firstAttempt = attempts[0];
+            const queuedAt = new Date(firstAttempt.submit_time || new Date()).getTime();
+            const elapsedSeconds = (Date.now() - queuedAt) / 1000;
+            
+            // If first attempt has been queued for over 35 seconds, help grade it so the queue moves forward!
+            if (elapsedSeconds > 35) {
+              console.log(`[Serverless Queue] Attempt ID ${firstAttempt.id} seems stuck (${Math.round(elapsedSeconds)}s). Helping grade it...`);
+              fetch('/api/evaluate-attempt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...authHeaders },
+                body: JSON.stringify({ attemptId: firstAttempt.id })
+              }).catch(() => {});
+            }
+          }
         }
       } catch (err) {
         console.error('Error polling attempt queue status:', err.message);
