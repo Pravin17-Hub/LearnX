@@ -2383,7 +2383,7 @@ export default function AdvancedQuizPage() {
         )}
 
         {/* PHASE 3A: QUEUE WAIT SCREEN */}
-        {phase === 'result' && currentAttempt && currentAttempt.score === null && (
+        {phase === 'result' && currentAttempt && (currentAttempt.ai_feedback?.includes('"status":"queued"') || currentAttempt.ai_feedback?.includes('"status":"grading"')) && (
           <div style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
             <div className="glass card" style={{ padding: '3rem 2rem' }}>
               <span style={{ fontSize: '3.5rem' }}>⏳</span>
@@ -2430,7 +2430,7 @@ export default function AdvancedQuizPage() {
         )}
 
         {/* PHASE 3B: DETAILED RESULT VIEW */}
-        {phase === 'result' && currentAttempt && currentAttempt.score !== null && (
+        {phase === 'result' && currentAttempt && !(currentAttempt.ai_feedback?.includes('"status":"queued"') || currentAttempt.ai_feedback?.includes('"status":"grading"')) && (
           <div style={{ maxWidth: '800px', margin: '0 auto' }}>
             
             {/* Score circle header card */}
