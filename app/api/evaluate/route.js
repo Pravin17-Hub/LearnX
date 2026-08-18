@@ -40,8 +40,8 @@ export async function POST(request) {
       ocrModel = 'gemini-3.6-flash';
     } else if (process.env.GROQ_API_KEY && apiKey === process.env.GROQ_API_KEY) {
       apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
-      model = 'qwen/qwen3.6-27b';
-      ocrModel = 'qwen/qwen3.6-27b';
+      model = 'openai/gpt-oss-20b';
+      ocrModel = 'openai/gpt-oss-20b';
     }
 
     const host = request.headers.get('host') || 'localhost:3000';
