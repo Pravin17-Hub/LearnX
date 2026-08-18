@@ -116,49 +116,41 @@ export async function POST(request) {
       ? `${question}\n\n[Question Paper Content]:\n${questionPaperText}`
       : question;
 
-    const systemPrompt = `You are an expert academic evaluator. You are given the Assignment details, an Answer Key, a Grading Rubric, and the Maximum Marks.
-Evaluate the student's response methodically and mathematically by following these rules:
-1. IDENTIFY OFFICIAL QUESTIONS:
-   - Identify the specific questions from the assignment text (\`question\`). If the assignment text lists specific questions (including any extracted question paper content listed in the description under '[Question Paper Content]:'), those are the ONLY official questions to grade.
-   - If the assignment text (\`question\`) does not contain specific questions, look at the \`answerKey\` to identify them.
-   - If both \`question\` and \`answerKey\` are generic, empty, or contain "Nothing", only then look at the student's submission (\`studentAnswer\`) to identify the questions.
-   - If no specific sub-questions can be identified anywhere, treat the entire assignment as a single overall question to be graded.
-2. EVALUATE ACCURACY & ALLOCATE MARKS:
-   - Determine the exact total number of official questions (N).
-   - The maximum marks allocated to EACH individual question MUST be exactly equal to: Maximum Marks (${maxMarks}) / N. Do NOT allocate custom weights, and do NOT group questions together. For example, if Maximum Marks is 100 and there are 20 questions, each question is worth exactly 5 marks.
-       - **GRADING RATIOS BASED ON CONTENT LENGTH & COMPLETENESS**:
-         - **SHORT AND CORRECT (30% to 40%)**: If the student's answer is very short (e.g. only a few words or a single short sentence) but technically correct according to the rubrics, award between 30% and 40% of the question's maximum marks. DO NOT award 60% to 80% for extremely short/low-effort answers.
-         - **PARTIAL ANSWER (50% to 70%)**: If the student attempted the question and provided partial answers or definitions covering all required items from the given rubric, award between 50% and 70% of the question's maximum marks.
-         - **ALL CORRECT & COMPLETE (80% to 100%)**: If the answer is correct, technically sound, and does not miss anything specified in the rubrics, award between 80% and 100% of the question's maximum marks.
-         - **MISSED TOPIC PENALTY**: Reduce exactly 1 mark (from the question's maximum marks) if any of the key topics or required rubric elements are missed.
-         - **MINIMUM MARKS FOR RELATED ANSWERS**: If the student's answer is not empty and contains at least something related to the question/topic (even if the content is incorrect, flawed, or extremely short), you MUST award a minimum of 1.0 mark. However, if the answer is completely unrelated to the question/topic, or is blank/unanswered, you MUST award exactly 0 marks.
-         - **LENIENCY ON CODE SYNTAX & TYPOS**: Keep leniency for minor syntax errors and simple typos since students write code under exam pressure without autocomplete IDEs.
-      - If a question is unanswered or missing in the student's submission, you MUST award exactly 0 marks for that specific question.
-3. OUTPUT FORMAT:
-   - Return a JSON object with a structured \`question_breakdown\` array. The array must contain exactly N items (one for each of the N official questions).
-   - Each item in the \`question_breakdown\` array must contain:
-     - "question_number": the integer question number (1, 2, ..., N).
-     - "max_marks": the maximum marks for this question (exactly ${maxMarks} / N).
-     - "score": the student's score for this question (from 0 to max_marks).
-     - "reason": a brief reason for the score (e.g., "Correct answer", "Partially correct", "Unanswered").
+    const systemPrompt = `You are an expert academic evaluator strictly following the official faculty grading rubric and model answer for each question:
 
-Respond ONLY with a JSON object in the following format:
+EVALUATION & GRADING INSTRUCTIONS:
+1. STRICT ADHERENCE TO FACULTY RUBRIC:
+   - Carefully read the Faculty Model Answer & Rubric provided in the prompt.
+   - Award marks strictly based on the specific points and criteria specified by the faculty (e.g. Definition, Syntax, Example Program, Types/Operations with Code, Overall Understanding).
+   - If a rubric specifies point allocations (e.g., 2 marks for definition, 3 marks for example program), allocate marks strictly according to those components.
+
+2. LENIENCY ON MINOR ERRORS (DO NOT OVER-PENALIZE):
+   - **ZERO PENALTY FOR MINOR SYNTAX ERRORS & TYPOS**: Do NOT deduct marks for minor code typos, casing mistakes, missing semicolons, or simple syntax errors in handwritten/typed code under exam conditions. If the logic, intent, or syntax structure is clear, award full credit for that code component.
+   - **DEDUCT ONLY FOR MISSING OR FACTUALLY WRONG CONTENT**: Deduct marks ONLY when required definitions, concepts, explanations, requested code examples, or operations are omitted, incomplete, or incorrect.
+
+3. SCORE ALLOCATION PER SUB-QUESTION:
+   - Total Maximum Marks: ${maxMarks}.0.
+   - For multiple sub-questions, allocate marks proportionally or according to the faculty rubric breakdown.
+   - If unanswered, blank, or completely unrelated to the topic, award 0.0 for that question.
+   - If at least something related to the topic is attempted, award at least 1.0.
+
+4. OUTPUT FORMAT:
+   - Return a JSON object with a structured \`question_breakdown\` array.
+   - Respond ONLY with a valid JSON object matching this schema:
 {
   "question_breakdown": [
     {
       "question_number": 1,
       "max_marks": 5.0,
-      "score": 5.0,
-      "reason": "Correct definition"
-    },
-    ...
+      "score": 4.5,
+      "reason": "Detailed summary of marks awarded across each faculty rubric criterion..."
+    }
   ],
-  "confidence": 95.0,
-  "feedback": "Detailed overall feedback about the grading...",
-  "strengths": "Key positive elements of the student's answer.",
-  "weaknesses": "Areas where the answer falls short or is missing."
-}
-The response must be valid JSON and contain no other text.`;
+  "confidence": 98.0,
+  "feedback": "Comprehensive summary of marks awarded across each faculty rubric criterion...",
+  "strengths": "Specific points from the faculty rubric where the student scored marks...",
+  "weaknesses": "Specific points from the faculty rubric where marks were lost (e.g. omitted operations, missing code)..."
+}`;
 
     const userContent = `Question: ${finalQuestion}
 
