@@ -251,16 +251,20 @@ export default function AdvancedQuizPage() {
           return;
         }
 
-        const { data: attempts, error: fetchErr } = await supabase
+        const { data: rawAttempts, error: fetchErr } = await supabase
           .from('quiz_attempts')
-          .select('*')
+          .select('id, ai_feedback, submit_time')
           .eq('quiz_id', quizId)
-          .like('ai_feedback', '%"status":"queued"%')
           .order('id', { ascending: true });
 
         if (fetchErr) throw fetchErr;
 
-        const ourIndex = (attempts || []).findIndex(att => att.id === currentAttempt.id);
+        const attempts = (rawAttempts || []).filter(att => {
+          const fb = att.ai_feedback || '';
+          return fb.includes('"status":"queued"') || fb.includes('"status":"grading"');
+        });
+
+        const ourIndex = attempts.findIndex(att => att.id === currentAttempt.id);
         
         if (ourIndex !== -1) {
           setQueuePosition(ourIndex);
