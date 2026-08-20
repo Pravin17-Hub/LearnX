@@ -53,7 +53,8 @@ export default function AdvancedQuizPage() {
   const [grantAccessTarget, setGrantAccessTarget] = useState(null);
   const [pdfConfirmTarget, setPdfConfirmTarget] = useState(null);
   const [editMarksTarget, setEditMarksTarget] = useState(null);
-  const [editMarksValue, setEditMarksValue] = useState('');
+  const [editQuestionsData, setEditQuestionsData] = useState([]);
+  const [editQuestionsMarks, setEditQuestionsMarks] = useState({});
 
   const triggerToast = (title, body) => {
     setToast({ title, body });
@@ -1715,32 +1716,150 @@ export default function AdvancedQuizPage() {
   };
 
   const handleEditMarks = (attempt) => {
-    if (!isClassCreator) {
-      triggerToast("Permission denied", "Only the classroom creator can edit marks.");
+    if (!isClassCreator && !isTeacher) {
+      triggerToast("Permission denied", "Only the classroom creator or faculty can edit marks.");
       return;
     }
+
+    let parsedFeedback = {};
+    try {
+      parsedFeedback = JSON.parse(attempt.ai_feedback || '{}');
+    } catch (e) {
+      parsedFeedback = {};
+    }
+
+    const qList = [];
+    const initialMarks = {};
+
+    if (questions && questions.length > 0) {
+      questions.forEach((q, idx) => {
+        const qId = String(q.id);
+        const fb = parsedFeedback[qId] || {};
+        const score = fb.score !== undefined ? Number(fb.score) : 0;
+        const maxM = q.points || fb.maxMarks || 10;
+        qList.push({
+          qId,
+          questionNumber: idx + 1,
+          questionText: q.question_text || fb.questionText || `Question ${idx + 1}`,
+          questionType: q.question_type || fb.questionType || 'THEORY',
+          maxMarks: maxM,
+          studentAnswer: fb.studentAnswer || ''
+        });
+        initialMarks[qId] = score;
+      });
+    } else {
+      const keys = Object.keys(parsedFeedback).filter(k => k !== 'status' && k !== 'feedbackMap');
+      keys.forEach((qId, idx) => {
+        const fb = parsedFeedback[qId];
+        if (fb && typeof fb === 'object') {
+          const score = fb.score !== undefined ? Number(fb.score) : 0;
+          const maxM = fb.maxMarks || 10;
+          qList.push({
+            qId,
+            questionNumber: idx + 1,
+            questionText: fb.questionText || `Question ${idx + 1}`,
+            questionType: fb.questionType || 'THEORY',
+            maxMarks: maxM,
+            studentAnswer: fb.studentAnswer || ''
+          });
+          initialMarks[qId] = score;
+        }
+      });
+    }
+
+    setEditQuestionsData(qList);
+    setEditQuestionsMarks(initialMarks);
     setEditMarksTarget(attempt);
-    setEditMarksValue(String(attempt.score));
   };
 
-  const executeEditMarks = async (attempt, newScoreVal) => {
-    const newScore = parseInt(newScoreVal, 10);
-    if (isNaN(newScore) || newScore < 0 || newScore > attempt.max_score) {
-      triggerToast('Invalid score', `Please enter a number between 0 and ${attempt.max_score}.`);
-      return;
+  const handleQuestionMarkChange = (qId, val) => {
+    setEditQuestionsMarks(prev => ({
+      ...prev,
+      [qId]: val
+    }));
+  };
+
+  const getCalculatedTotal = () => {
+    let sum = 0;
+    Object.values(editQuestionsMarks).forEach(v => {
+      const num = parseFloat(v);
+      if (!isNaN(num)) sum += num;
+    });
+    return Math.round(sum * 10) / 10;
+  };
+
+  const executeEditQuestionMarks = async () => {
+    if (!editMarksTarget) return;
+
+    let sum = 0;
+    for (const q of editQuestionsData) {
+      const val = editQuestionsMarks[q.qId];
+      const num = parseFloat(val);
+      if (isNaN(num) || num < 0 || num > q.maxMarks) {
+        triggerToast('Invalid score', `Question ${q.questionNumber} score must be between 0 and ${q.maxMarks}.`);
+        return;
+      }
+      sum += num;
     }
+
+    const finalRoundedTotal = Math.round(sum);
+
+    let updatedFeedback = {};
+    try {
+      updatedFeedback = JSON.parse(editMarksTarget.ai_feedback || '{}');
+    } catch (e) {
+      updatedFeedback = {};
+    }
+
+    editQuestionsData.forEach(q => {
+      const newScore = parseFloat(editQuestionsMarks[q.qId]) || 0;
+      if (!updatedFeedback[q.qId]) {
+        updatedFeedback[q.qId] = {
+          questionText: q.questionText,
+          questionType: q.questionType,
+          maxMarks: q.maxMarks,
+          score: newScore,
+          feedback: 'Mark updated manually by teacher.',
+          correct: newScore >= q.maxMarks * 0.75
+        };
+      } else {
+        updatedFeedback[q.qId] = {
+          ...updatedFeedback[q.qId],
+          score: newScore,
+          correct: newScore >= q.maxMarks * 0.75
+        };
+      }
+    });
 
     try {
       const { error } = await supabase
         .from('quiz_attempts')
-        .update({ score: newScore })
-        .eq('id', attempt.id);
-        
+        .update({
+          score: finalRoundedTotal,
+          ai_feedback: JSON.stringify(updatedFeedback)
+        })
+        .eq('id', editMarksTarget.id);
+
       if (error) throw error;
-      
-      setAllAttemptsList(prev => prev.map(a => a.id === attempt.id ? { ...a, score: newScore } : a));
-      setCurrentAttempt(prev => prev && prev.id === attempt.id ? { ...prev, score: newScore } : prev);
-      triggerToast('Success', 'Marks updated successfully!');
+
+      // Update state lists
+      setAllAttemptsList(prev => prev.map(a => a.id === editMarksTarget.id ? {
+        ...a,
+        score: finalRoundedTotal,
+        ai_feedback: JSON.stringify(updatedFeedback)
+      } : a));
+
+      if (currentAttempt && currentAttempt.id === editMarksTarget.id) {
+        setCurrentAttempt(prev => ({
+          ...prev,
+          score: finalRoundedTotal,
+          ai_feedback: JSON.stringify(updatedFeedback)
+        }));
+        setFeedbackDetails(updatedFeedback);
+      }
+
+      setEditMarksTarget(null);
+      triggerToast('Success', `Marks updated successfully! New Total: ${finalRoundedTotal}/${editMarksTarget.max_score || quiz?.max_marks || 40}`);
     } catch (err) {
       triggerToast('Failed to update marks', err.message);
     }
@@ -2263,6 +2382,11 @@ export default function AdvancedQuizPage() {
                                 <button onClick={() => handleDownloadPDF(att)} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}>
                                   📄 PDF
                                 </button>
+                                {(isClassCreator || isTeacher) && (
+                                  <button onClick={() => handleEditMarks(att)} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 600 }}>
+                                    ✏️ Edit Marks
+                                  </button>
+                                )}
                                 {isClassCreator && (
                                   <button onClick={() => handleGrantAccess(att)} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--color-primary)' }}>
                                     🔓 Grant Continue
@@ -2480,13 +2604,13 @@ export default function AdvancedQuizPage() {
                 <span style={{ fontSize: '3.5rem', fontWeight: 900, color: 'var(--success)' }}>
                   {currentAttempt.score}/{currentAttempt.max_score}
                 </span>
-                {isClassCreator && (
+                {(isClassCreator || isTeacher) && (
                   <button 
                     onClick={() => handleEditMarks(currentAttempt)} 
                     className="btn btn-secondary"
-                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', display: 'block', margin: '0.5rem auto' }}
+                    style={{ padding: '0.5rem 1.25rem', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', margin: '0.75rem auto', fontWeight: 700 }}
                   >
-                    ✏️ Edit Marks
+                    ✏️ Edit Question Marks
                   </button>
                 )}
                 {currentAttempt.violation_reason && (
@@ -2756,40 +2880,180 @@ export default function AdvancedQuizPage() {
         </div>
       )}
 
-      {/* ================= CUSTOM EDIT MARKS DIALOG ================= */}
+      {/* ================= CUSTOM PER-QUESTION EDIT MARKS DIALOG ================= */}
       {editMarksTarget && (
-        <div className="modal-overlay" style={{ zIndex: 10000 }}>
-          <div className="glass modal-content" style={{ maxWidth: '400px', padding: '2rem', textAlign: 'center', background: '#FFFFFF' }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.8rem', color: 'var(--text-primary)', fontFamily: 'Fraunces, serif' }}>✏️ Edit Marks</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
-              Enter new score for <strong>{editMarksTarget.users?.name || editMarksTarget.guest_name || 'Student'}</strong> (Max: {editMarksTarget.max_score}):
-            </p>
-            <input 
-              type="number" 
-              className="input" 
-              style={{ marginBottom: '1.5rem', textAlign: 'center', fontSize: '1.1rem', background: '#F1F5F9', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
-              value={editMarksValue} 
-              onChange={(e) => setEditMarksValue(e.target.value)} 
-            />
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+        <div className="modal-overlay" style={{ zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div className="glass modal-content" style={{ 
+            maxWidth: '680px', 
+            width: '100%', 
+            maxHeight: '90vh', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            padding: '2rem', 
+            background: '#FFFFFF',
+            borderRadius: '16px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'Fraunces, serif', margin: 0 }}>
+                  ✏️ Edit Question Marks
+                </h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginTop: '0.3rem', margin: 0 }}>
+                  Student: <strong>{editMarksTarget.users?.name || editMarksTarget.guest_name || 'Student'}</strong> {editMarksTarget.users?.reg_no && `(${editMarksTarget.users.reg_no})`}
+                </p>
+              </div>
+              <button 
+                onClick={() => setEditMarksTarget(null)}
+                style={{ background: 'transparent', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Live Automatically Calculated Total Score Banner */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
+              border: '1.5px solid rgba(99, 102, 241, 0.3)',
+              padding: '1rem 1.25rem',
+              borderRadius: '12px',
+              marginBottom: '1.25rem',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  ⚡ LIVE CALCULATED TOTAL
+                </span>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.2rem 0 0 0' }}>
+                  Updates automatically as you edit each question's marks
+                </p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: '2.2rem', fontWeight: 900, color: 'var(--color-primary)' }}>
+                  {getCalculatedTotal()}
+                </span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                  /{editMarksTarget.max_score || quiz?.max_marks || 40}
+                </span>
+              </div>
+            </div>
+
+            {/* Scrollable Questions Breakdown List */}
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem', display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
+              {editQuestionsData.map((q) => {
+                const currentVal = editQuestionsMarks[q.qId] !== undefined ? editQuestionsMarks[q.qId] : '';
+                const numVal = parseFloat(currentVal);
+                const isOver = !isNaN(numVal) && (numVal < 0 || numVal > q.maxMarks);
+
+                return (
+                  <div key={q.qId} style={{
+                    background: '#F8FAFC',
+                    border: isOver ? '1.5px solid var(--danger)' : '1px solid var(--border-color)',
+                    borderRadius: '10px',
+                    padding: '1rem',
+                    transition: 'border-color 0.2s ease'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.4rem' }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ 
+                          display: 'inline-block', 
+                          fontSize: '0.75rem', 
+                          fontWeight: 700, 
+                          background: 'rgba(99, 102, 241, 0.1)', 
+                          color: 'var(--color-primary)', 
+                          padding: '0.2rem 0.5rem', 
+                          borderRadius: '6px',
+                          marginBottom: '0.3rem'
+                        }}>
+                          Question {q.questionNumber} ({q.maxMarks} Marks Max)
+                        </span>
+                        <p style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0, lineHeight: 1.4 }}>
+                          {q.questionText}
+                        </p>
+                      </div>
+
+                      {/* Marks Input for this question */}
+                      <div style={{ minWidth: '120px', textAlign: 'right' }}>
+                        <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.2rem' }}>
+                          MARKS (MAX {q.maxMarks})
+                        </label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max={q.maxMarks}
+                          value={currentVal}
+                          onChange={(e) => handleQuestionMarkChange(q.qId, e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '0.5rem 0.6rem',
+                            fontSize: '1.1rem',
+                            fontWeight: 700,
+                            textAlign: 'center',
+                            borderRadius: '8px',
+                            border: isOver ? '1.5px solid var(--danger)' : '1px solid var(--border-color)',
+                            background: '#FFFFFF',
+                            color: isOver ? 'var(--danger)' : 'var(--text-primary)',
+                            outline: 'none'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Student Answer Snippet */}
+                    {q.studentAnswer && (
+                      <div style={{ 
+                        marginTop: '0.5rem', 
+                        background: '#FFFFFF', 
+                        padding: '0.5rem 0.75rem', 
+                        borderRadius: '6px', 
+                        border: '1px solid rgba(0,0,0,0.06)', 
+                        fontSize: '0.78rem', 
+                        color: 'var(--text-secondary)', 
+                        maxHeight: '70px', 
+                        overflowY: 'auto', 
+                        whiteSpace: 'pre-wrap' 
+                      }}>
+                        <strong style={{ color: 'var(--text-primary)' }}>Student Submission:</strong> {q.studentAnswer}
+                      </div>
+                    )}
+
+                    {isOver && (
+                      <p style={{ color: 'var(--danger)', fontSize: '0.75rem', fontWeight: 600, margin: '0.3rem 0 0 0' }}>
+                        ⚠️ Score must be between 0 and {q.maxMarks}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
               <button 
                 onClick={() => setEditMarksTarget(null)} 
                 className="btn btn-secondary" 
-                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+                style={{ padding: '0.7rem 1.5rem', cursor: 'pointer', fontWeight: 600 }}
               >
                 Cancel
               </button>
               <button 
-                onClick={async () => {
-                  const target = editMarksTarget;
-                  const val = editMarksValue;
-                  setEditMarksTarget(null);
-                  await executeEditMarks(target, val);
-                }} 
+                onClick={executeEditQuestionMarks} 
                 className="btn btn-primary" 
-                style={{ padding: '0.6rem 1.5rem', cursor: 'pointer' }}
+                style={{ 
+                  padding: '0.7rem 1.75rem', 
+                  cursor: 'pointer', 
+                  fontWeight: 700,
+                  background: 'var(--color-primary)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem'
+                }}
               >
-                Save
+                💾 Save & Update Total ({getCalculatedTotal()}/{editMarksTarget.max_score || quiz?.max_marks || 40})
               </button>
             </div>
           </div>
