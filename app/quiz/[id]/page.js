@@ -260,9 +260,15 @@ export default function AdvancedQuizPage() {
 
         if (fetchErr) throw fetchErr;
 
+        const nowTime = Date.now();
         const attempts = (rawAttempts || []).filter(att => {
           const fb = att.ai_feedback || '';
-          return fb.includes('"status":"queued"') || fb.includes('"status":"grading"');
+          const isPending = fb.includes('"status":"queued"') || fb.includes('"status":"grading"');
+          if (!isPending) return false;
+          // Ignore stale attempts older than 3 minutes from queue position counting
+          const submitTime = new Date(att.submit_time || nowTime).getTime();
+          const ageInSeconds = (nowTime - submitTime) / 1000;
+          return ageInSeconds < 180 || att.id === currentAttempt.id;
         });
 
         const ourIndex = attempts.findIndex(att => att.id === currentAttempt.id);
@@ -288,8 +294,8 @@ export default function AdvancedQuizPage() {
             const queuedAt = new Date(firstAttempt.submit_time || new Date()).getTime();
             const elapsedSeconds = (Date.now() - queuedAt) / 1000;
             
-            // If first attempt has been queued for over 35 seconds, help grade it so the queue moves forward!
-            if (elapsedSeconds > 35) {
+            // If first attempt has been queued for over 15 seconds, help grade it so the queue moves forward!
+            if (elapsedSeconds > 15) {
               console.log(`[Serverless Queue] Attempt ID ${firstAttempt.id} seems stuck (${Math.round(elapsedSeconds)}s). Helping grade it...`);
               fetch('/api/evaluate-attempt', {
                 method: 'POST',
@@ -1494,12 +1500,20 @@ export default function AdvancedQuizPage() {
         });
       }
 
-      // Trigger background queue worker wake-up on server
-      fetch('/api/evaluate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ ping: true })
-      }).catch(() => {});
+      // Trigger immediate on-demand evaluation on server for zero delay
+      if (hasTheory && attempt?.id) {
+        fetch('/api/evaluate-attempt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ attemptId: attempt.id })
+        }).catch(() => {});
+      } else {
+        fetch('/api/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ ping: true })
+        }).catch(() => {});
+      }
 
       setCurrentAttempt(attempt);
       setPastAttempt(attempt);
@@ -2564,7 +2578,7 @@ export default function AdvancedQuizPage() {
                 </p>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
                   Estimated Wait Time: {queuePosition !== null ? (
-                    queuePosition === 0 ? 'Evaluating your answers now...' : `${Math.floor(((queuePosition + 1) * 22) / 60)}m ${((queuePosition + 1) * 22) % 60}s`
+                    queuePosition === 0 ? 'Evaluating your answers now (~5-10s)...' : `~${(queuePosition + 1) * 8} seconds`
                   ) : 'Estimating...'}
                 </p>
               </div>
