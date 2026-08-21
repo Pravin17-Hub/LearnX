@@ -219,15 +219,47 @@ export default function AdvancedQuizPage() {
     return () => clearInterval(interval);
   }, [phase, activeAttempt]);
 
-  // Poll attempt queue status and position
+  // Real-time listener and fast polling for instant result display without refresh
   useEffect(() => {
     const currentFeedbackStr = currentAttempt?.ai_feedback || '';
     const isCurrentPending = currentFeedbackStr.includes('"status":"queued"') || currentFeedbackStr.includes('"status":"grading"');
     
     if (phase !== 'result' || !currentAttempt || !isCurrentPending) return;
 
+    let isMounted = true;
+
+    // 1. Setup Supabase Realtime WebSocket for instant 0ms result updates
+    const channel = supabase
+      .channel(`quiz-attempt-live-${currentAttempt.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'quiz_attempts',
+          filter: `id=eq.${currentAttempt.id}`
+        },
+        (payload) => {
+          if (!isMounted) return;
+          const updated = payload.new;
+          const fb = updated?.ai_feedback || '';
+          if (!fb.includes('"status":"queued"') && !fb.includes('"status":"grading"')) {
+            console.log('[Realtime] Attempt graded event received! Displaying result...');
+            setCurrentAttempt(updated);
+            setPastAttempt(updated);
+            try {
+              setFeedbackDetails(JSON.parse(fb));
+            } catch (e) {
+              setFeedbackDetails({});
+            }
+          }
+        }
+      )
+      .subscribe();
+
     let interval;
     const checkStatus = async () => {
+      if (!isMounted) return;
       try {
         const { data: latestAttempt, error } = await supabase
           .from('quiz_attempts')
@@ -248,7 +280,7 @@ export default function AdvancedQuizPage() {
           } catch (e) {
             setFeedbackDetails({});
           }
-          clearInterval(interval);
+          if (interval) clearInterval(interval);
           return;
         }
 
@@ -282,12 +314,29 @@ export default function AdvancedQuizPage() {
 
           if (ourIndex === 0) {
             // We are first. Trigger our own evaluation on the server!
-            console.log('[Serverless Queue] We are first in queue. Evaluating ourselves...');
             fetch('/api/evaluate-attempt', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', ...authHeaders },
               body: JSON.stringify({ attemptId: currentAttempt.id })
-            }).catch(() => {});
+            })
+            .then(res => res.json())
+            .then(async (resData) => {
+              if (resData?.success && isMounted) {
+                const { data: freshAtt } = await supabase
+                  .from('quiz_attempts')
+                  .select('*')
+                  .eq('id', currentAttempt.id)
+                  .single();
+                if (freshAtt && !freshAtt.ai_feedback?.includes('"status":"queued"') && !freshAtt.ai_feedback?.includes('"status":"grading"')) {
+                  setCurrentAttempt(freshAtt);
+                  setPastAttempt(freshAtt);
+                  try {
+                    setFeedbackDetails(JSON.parse(freshAtt.ai_feedback || '{}'));
+                  } catch (e) {}
+                }
+              }
+            })
+            .catch(() => {});
           } else {
             // We are waiting. Check if the attempt at index 0 has timed out (offline student)
             const firstAttempt = attempts[0];
@@ -296,7 +345,6 @@ export default function AdvancedQuizPage() {
             
             // If first attempt has been queued for over 15 seconds, help grade it so the queue moves forward!
             if (elapsedSeconds > 15) {
-              console.log(`[Serverless Queue] Attempt ID ${firstAttempt.id} seems stuck (${Math.round(elapsedSeconds)}s). Helping grade it...`);
               fetch('/api/evaluate-attempt', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...authHeaders },
@@ -319,10 +367,15 @@ export default function AdvancedQuizPage() {
       body: JSON.stringify({ ping: true })
     }).catch(() => {});
 
-    interval = setInterval(checkStatus, 5000);
+    // Fast polling every 1.5s for instant UI transition
+    interval = setInterval(checkStatus, 1500);
 
-    return () => clearInterval(interval);
-  }, [phase, currentAttempt, quizId]);
+    return () => {
+      isMounted = false;
+      if (interval) clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [phase, currentAttempt?.id, currentAttempt?.ai_feedback, quizId]);
 
   // --- SECURE EXAM CONTROLS LIFE-CYCLE ---
   useEffect(() => {
